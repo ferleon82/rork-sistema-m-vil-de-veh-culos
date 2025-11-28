@@ -12,16 +12,19 @@ import {
 } from 'react-native';
 import { useClients } from '@/contexts/ClientsContext';
 import { Client } from '@/types';
-import { Plus, Search, User, Phone, Mail, MapPin, FileText, X, Trash2, Edit } from 'lucide-react-native';
+import { LATIN_AMERICAN_COUNTRIES, getCountryByCode } from '@/constants/countries';
+import { Plus, Search, User, Phone, Mail, MapPin, FileText, X, Trash2, Edit, Globe } from 'lucide-react-native';
 
 export default function ClientsScreen() {
   const { clients, addClient, updateClient, deleteClient, searchClients } = useClients();
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    countryCode: 'SV',
     email: '',
     address: '',
     documentNumber: '',
@@ -34,6 +37,7 @@ export default function ClientsScreen() {
     setFormData({
       name: '',
       phone: '',
+      countryCode: 'SV',
       email: '',
       address: '',
       documentNumber: '',
@@ -52,6 +56,7 @@ export default function ClientsScreen() {
     setFormData({
       name: client.name,
       phone: client.phone,
+      countryCode: client.countryCode,
       email: client.email || '',
       address: client.address || '',
       documentNumber: client.documentNumber || '',
@@ -71,6 +76,7 @@ export default function ClientsScreen() {
         await updateClient(editingClient.id, {
           name: formData.name,
           phone: formData.phone,
+          countryCode: formData.countryCode,
           email: formData.email || undefined,
           address: formData.address || undefined,
           documentNumber: formData.documentNumber || undefined,
@@ -81,6 +87,7 @@ export default function ClientsScreen() {
         await addClient({
           name: formData.name,
           phone: formData.phone,
+          countryCode: formData.countryCode,
           email: formData.email || undefined,
           address: formData.address || undefined,
           documentNumber: formData.documentNumber || undefined,
@@ -113,57 +120,67 @@ export default function ClientsScreen() {
     );
   };
 
-  const renderClient = ({ item }: { item: Client }) => (
-    <View style={styles.clientCard}>
-      <View style={styles.clientHeader}>
-        <View style={styles.clientAvatar}>
-          <User size={24} color="#2563eb" />
-        </View>
-        <View style={styles.clientInfo}>
-          <Text style={styles.clientName}>{item.name}</Text>
-          <View style={styles.clientDetail}>
-            <Phone size={14} color="#6b7280" />
-            <Text style={styles.clientPhone}>{item.phone}</Text>
+  const selectedCountry = getCountryByCode(formData.countryCode);
+
+  const renderClient = ({ item }: { item: Client }) => {
+    const country = getCountryByCode(item.countryCode);
+    
+    return (
+      <View style={styles.clientCard}>
+        <View style={styles.clientHeader}>
+          <View style={styles.clientAvatar}>
+            <User size={24} color="#2563eb" />
           </View>
-          {item.email && (
+          <View style={styles.clientInfo}>
+            <Text style={styles.clientName}>{item.name}</Text>
             <View style={styles.clientDetail}>
-              <Mail size={14} color="#6b7280" />
-              <Text style={styles.clientEmail}>{item.email}</Text>
+              <Phone size={14} color="#6b7280" />
+              <Text style={styles.clientPhone}>{item.phone}</Text>
             </View>
-          )}
+            {item.email && (
+              <View style={styles.clientDetail}>
+                <Mail size={14} color="#6b7280" />
+                <Text style={styles.clientEmail}>{item.email}</Text>
+              </View>
+            )}
+            <View style={styles.clientDetail}>
+              <Globe size={14} color="#6b7280" />
+              <Text style={styles.clientCountry}>{country?.name}</Text>
+            </View>
+          </View>
+          <View style={styles.clientActions}>
+            <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
+              <Edit size={20} color="#2563eb" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionButton}>
+              <Trash2 size={20} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
         </View>
-        <View style={styles.clientActions}>
-          <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
-            <Edit size={20} color="#2563eb" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionButton}>
-            <Trash2 size={20} color="#ef4444" />
-          </TouchableOpacity>
-        </View>
+        
+        {item.address && (
+          <View style={styles.clientDetail}>
+            <MapPin size={14} color="#6b7280" />
+            <Text style={styles.clientAddress}>{item.address}</Text>
+          </View>
+        )}
+        
+        {item.documentNumber && (
+          <View style={styles.clientDetail}>
+            <FileText size={14} color="#6b7280" />
+            <Text style={styles.clientDoc}>DUI: {item.documentNumber}</Text>
+          </View>
+        )}
+        
+        {item.notes && (
+          <View style={styles.notesContainer}>
+            <Text style={styles.notesLabel}>Notas:</Text>
+            <Text style={styles.notesText}>{item.notes}</Text>
+          </View>
+        )}
       </View>
-      
-      {item.address && (
-        <View style={styles.clientDetail}>
-          <MapPin size={14} color="#6b7280" />
-          <Text style={styles.clientAddress}>{item.address}</Text>
-        </View>
-      )}
-      
-      {item.documentNumber && (
-        <View style={styles.clientDetail}>
-          <FileText size={14} color="#6b7280" />
-          <Text style={styles.clientDoc}>DUI: {item.documentNumber}</Text>
-        </View>
-      )}
-      
-      {item.notes && (
-        <View style={styles.notesContainer}>
-          <Text style={styles.notesLabel}>Notas:</Text>
-          <Text style={styles.notesText}>{item.notes}</Text>
-        </View>
-      )}
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -238,15 +255,38 @@ export default function ClientsScreen() {
 
               <View style={styles.formGroup}>
                 <Text style={styles.label}>
+                  País <Text style={styles.required}>*</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.countrySelector}
+                  onPress={() => setShowCountryPicker(true)}
+                >
+                  <Globe size={20} color="#6b7280" />
+                  <Text style={styles.countrySelectorText}>
+                    {selectedCountry?.name} ({selectedCountry?.phonePrefix})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>
                   Teléfono <Text style={styles.required}>*</Text>
                 </Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej: +503 1234 5678"
-                  value={formData.phone}
-                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                  keyboardType="phone-pad"
-                />
+                <View style={styles.phoneInputContainer}>
+                  <View style={styles.phonePrefix}>
+                    <Text style={styles.phonePrefixText}>{selectedCountry?.phonePrefix}</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.phoneInput]}
+                    placeholder="1234 5678"
+                    value={formData.phone.replace(selectedCountry?.phonePrefix || '', '').trim()}
+                    onChangeText={(text) => {
+                      const cleanPhone = text.replace(/[^0-9]/g, '');
+                      setFormData({ ...formData, phone: `${selectedCountry?.phonePrefix}${cleanPhone}` });
+                    }}
+                    keyboardType="phone-pad"
+                  />
+                </View>
               </View>
 
               <View style={styles.formGroup}>
@@ -311,6 +351,44 @@ export default function ClientsScreen() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showCountryPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCountryPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar País</Text>
+              <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={LATIN_AMERICAN_COUNTRIES}
+              keyExtractor={(item) => item.code}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.countryItem,
+                    formData.countryCode === item.code && styles.countryItemSelected,
+                  ]}
+                  onPress={() => {
+                    setFormData({ ...formData, countryCode: item.code })
+                    setShowCountryPicker(false);
+                  }}
+                >
+                  <Text style={styles.countryItemName}>{item.name}</Text>
+                  <Text style={styles.countryItemPrefix}>{item.phonePrefix}</Text>
+                </TouchableOpacity>
+              )}
+              style={styles.countryList}
+            />
           </View>
         </View>
       </Modal>
@@ -402,6 +480,10 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   clientEmail: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  clientCountry: {
     fontSize: 14,
     color: '#6b7280',
   },
@@ -503,6 +585,44 @@ const styles = StyleSheet.create({
     color: '#111827',
     backgroundColor: '#fff',
   },
+  countrySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+  },
+  countrySelectorText: {
+    fontSize: 16,
+    color: '#111827',
+    flex: 1,
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  phonePrefix: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+  phonePrefixText: {
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: '600' as const,
+    textAlign: 'center',
+  },
+  phoneInput: {
+    flex: 1,
+  },
   textArea: {
     minHeight: 100,
     textAlignVertical: 'top',
@@ -537,5 +657,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#fff',
+  },
+  countryList: {
+    maxHeight: 400,
+  },
+  countryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  countryItemSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  countryItemName: {
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: '500' as const,
+  },
+  countryItemPrefix: {
+    fontSize: 16,
+    color: '#6b7280',
   },
 });
