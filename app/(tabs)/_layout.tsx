@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { LayoutDashboard, Car, ClipboardList, Users, Settings } from "lucide-react-native";
+import { LayoutDashboard, Car, ClipboardList, Users, UserCheck, Settings } from "lucide-react-native";
 import React from "react";
 
 export default function TabLayout() {
@@ -49,6 +49,13 @@ export default function TabLayout() {
         options={{
           title: "Órdenes",
           tabBarIcon: ({ color, size }) => <ClipboardList size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="clients"
+        options={{
+          title: "Clientes",
+          tabBarIcon: ({ color, size }) => <UserCheck size={size} color={color} />,
         }}
       />
       <Tabs.Screen

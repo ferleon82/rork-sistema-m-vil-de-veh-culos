@@ -1,5 +1,16 @@
 export type UserRole = 'admin' | 'technician' | 'mechanic';
 
+export interface Client {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  documentNumber?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -16,6 +27,7 @@ export interface Vehicle {
   model: string;
   year: number;
   currentKm: number;
+  clientId: string;
   ownerName: string;
   ownerPhone: string;
   ownerEmail?: string;

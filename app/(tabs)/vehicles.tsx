@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { Stack } from 'expo-router';
-import { Car, Phone, Mail, Plus } from 'lucide-react-native';
+import { Car, Phone, Mail, Plus, ChevronDown } from 'lucide-react-native';
 import { useVehicles } from '@/contexts/VehiclesContext';
+import { useClients } from '@/contexts/ClientsContext';
+import { Client } from '@/types';
 
 export default function VehiclesScreen() {
   const { vehicles, addVehicle } = useVehicles();
+  const { clients } = useClients();
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [clientSelectorVisible, setClientSelectorVisible] = useState<boolean>(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState<{
     vin: string;
     plate: string;
@@ -14,9 +19,6 @@ export default function VehiclesScreen() {
     model: string;
     year: string;
     currentKm: string;
-    ownerName: string;
-    ownerPhone: string;
-    ownerEmail: string;
   }>({
     vin: '',
     plate: '',
@@ -24,13 +26,15 @@ export default function VehiclesScreen() {
     model: '',
     year: '',
     currentKm: '',
-    ownerName: '',
-    ownerPhone: '',
-    ownerEmail: '',
   });
 
   const handleSubmit = async () => {
-    if (!formData.vin || !formData.plate || !formData.brand || !formData.model || !formData.year || !formData.currentKm || !formData.ownerName || !formData.ownerPhone) {
+    if (!selectedClient) {
+      Alert.alert('Error', 'Por favor selecciona un cliente');
+      return;
+    }
+
+    if (!formData.vin || !formData.plate || !formData.brand || !formData.model || !formData.year || !formData.currentKm) {
       Alert.alert('Error', 'Por favor completa todos los campos requeridos');
       return;
     }
@@ -56,12 +60,14 @@ export default function VehiclesScreen() {
         model: formData.model,
         year,
         currentKm,
-        ownerName: formData.ownerName,
-        ownerPhone: formData.ownerPhone,
-        ownerEmail: formData.ownerEmail || undefined,
+        clientId: selectedClient.id,
+        ownerName: selectedClient.name,
+        ownerPhone: selectedClient.phone,
+        ownerEmail: selectedClient.email,
       });
       Alert.alert('Éxito', 'Vehículo registrado correctamente');
       setModalVisible(false);
+      setSelectedClient(null);
       setFormData({
         vin: '',
         plate: '',
@@ -69,14 +75,15 @@ export default function VehiclesScreen() {
         model: '',
         year: '',
         currentKm: '',
-        ownerName: '',
-        ownerPhone: '',
-        ownerEmail: '',
       });
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'No se pudo registrar el vehículo');
-      console.error(error);
     }
+  };
+
+  const handleSelectClient = (client: Client) => {
+    setSelectedClient(client);
+    setClientSelectorVisible(false);
   };
 
   return (
@@ -231,37 +238,29 @@ export default function VehiclesScreen() {
               </View>
 
               <View style={styles.sectionDivider} />
-              <Text style={styles.sectionTitle}>Datos del Propietario</Text>
+              <Text style={styles.sectionTitle}>Cliente</Text>
 
-              <Text style={styles.label}>Nombre *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.ownerName}
-                onChangeText={(text) => setFormData({ ...formData, ownerName: text })}
-                placeholder="Nombre completo"
-                placeholderTextColor="#9ca3af"
-              />
+              <Text style={styles.label}>Selecciona el cliente *</Text>
+              <TouchableOpacity
+                style={styles.clientSelector}
+                onPress={() => setClientSelectorVisible(true)}
+              >
+                {selectedClient ? (
+                  <View>
+                    <Text style={styles.clientName}>{selectedClient.name}</Text>
+                    <Text style={styles.clientPhone}>{selectedClient.phone}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.clientPlaceholder}>Seleccionar cliente...</Text>
+                )}
+                <ChevronDown size={20} color="#6b7280" />
+              </TouchableOpacity>
 
-              <Text style={styles.label}>Teléfono *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.ownerPhone}
-                onChangeText={(text) => setFormData({ ...formData, ownerPhone: text })}
-                placeholder="+503 1234-5678"
-                placeholderTextColor="#9ca3af"
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.ownerEmail}
-                onChangeText={(text) => setFormData({ ...formData, ownerEmail: text })}
-                placeholder="correo@ejemplo.com"
-                placeholderTextColor="#9ca3af"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+              {clients.length === 0 && (
+                <Text style={styles.warningText}>
+                  No hay clientes registrados. Ve a la pestaña Clientes para crear uno.
+                </Text>
+              )}
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -279,6 +278,42 @@ export default function VehiclesScreen() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={clientSelectorVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setClientSelectorVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Seleccionar Cliente</Text>
+            <ScrollView style={styles.clientList}>
+              {clients.map((client) => (
+                <TouchableOpacity
+                  key={client.id}
+                  style={styles.clientItem}
+                  onPress={() => handleSelectClient(client)}
+                >
+                  <View>
+                    <Text style={styles.clientItemName}>{client.name}</Text>
+                    <Text style={styles.clientItemPhone}>{client.phone}</Text>
+                    {client.email && (
+                      <Text style={styles.clientItemEmail}>{client.email}</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setClientSelectorVisible(false)}
+            >
+              <Text style={styles.closeButtonText}>Cerrar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -469,6 +504,72 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563eb',
   },
   submitButtonText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#fff',
+  },
+  clientSelector: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  clientName: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#1f2937',
+  },
+  clientPhone: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  clientPlaceholder: {
+    fontSize: 16,
+    color: '#9ca3af',
+  },
+  warningText: {
+    fontSize: 14,
+    color: '#f59e0b',
+    marginBottom: 16,
+    fontStyle: 'italic' as const,
+  },
+  clientList: {
+    maxHeight: 400,
+  },
+  clientItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  clientItemName: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  clientItemPhone: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 2,
+  },
+  clientItemEmail: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  closeButton: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#2563eb',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  closeButtonText: {
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#fff',

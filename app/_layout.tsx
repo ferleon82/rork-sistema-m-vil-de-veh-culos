@@ -7,6 +7,7 @@ import { UsersProvider } from "@/contexts/UsersContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { VehiclesProvider } from "@/contexts/VehiclesContext";
 import { WorkOrdersProvider } from "@/contexts/WorkOrdersContext";
+import { ClientsProvider } from "@/contexts/ClientsContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -32,11 +33,13 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <UsersProvider>
           <AuthProvider>
-            <VehiclesProvider>
-              <WorkOrdersProvider>
-                <RootLayoutNav />
-              </WorkOrdersProvider>
-            </VehiclesProvider>
+            <ClientsProvider>
+              <VehiclesProvider>
+                <WorkOrdersProvider>
+                  <RootLayoutNav />
+                </WorkOrdersProvider>
+              </VehiclesProvider>
+            </ClientsProvider>
           </AuthProvider>
         </UsersProvider>
       </GestureHandlerRootView>
