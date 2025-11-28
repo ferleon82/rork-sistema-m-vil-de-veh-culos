@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
-import { Stack } from 'expo-router';
-import { Car, Phone, Mail, Plus, ChevronDown } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, FlatList } from 'react-native';
+import { Car, Phone, Mail, Plus, ChevronDown, Search } from 'lucide-react-native';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useClients } from '@/contexts/ClientsContext';
 import { Client } from '@/types';
@@ -9,6 +8,7 @@ import { Client } from '@/types';
 export default function VehiclesScreen() {
   const { vehicles, addVehicle } = useVehicles();
   const { clients } = useClients();
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [clientSelectorVisible, setClientSelectorVisible] = useState<boolean>(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -86,81 +86,102 @@ export default function VehiclesScreen() {
     setClientSelectorVisible(false);
   };
 
+  const filteredVehicles = searchQuery
+    ? vehicles.filter(
+        (v) =>
+          v.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          v.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          v.ownerName.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : vehicles;
+
+  const renderVehicle = ({ item }: { item: typeof vehicles[0] }) => (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={styles.iconContainer}>
+          <Car size={24} color="#2563eb" />
+        </View>
+        <View style={styles.vehicleInfo}>
+          <Text style={styles.vehicleTitle}>
+            {item.brand} {item.model}
+          </Text>
+          <Text style={styles.vehiclePlate}>{item.plate}</Text>
+        </View>
+      </View>
+
+      <View style={styles.cardBody}>
+        <View style={styles.detailRow}>
+          <Text style={styles.label}>VIN:</Text>
+          <Text style={styles.value}>{item.vin}</Text>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.label}>Año:</Text>
+          <Text style={styles.value}>{item.year}</Text>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.label}>Kilometraje:</Text>
+          <Text style={styles.value}>{item.currentKm.toLocaleString()} km</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.ownerSection}>
+          <Text style={styles.ownerTitle}>Propietario</Text>
+          <Text style={styles.ownerName}>{item.ownerName}</Text>
+
+          <View style={styles.contactRow}>
+            <Phone size={16} color="#6b7280" />
+            <Text style={styles.contactText}>{item.ownerPhone}</Text>
+          </View>
+
+          {item.ownerEmail && (
+            <View style={styles.contactRow}>
+              <Mail size={16} color="#6b7280" />
+              <Text style={styles.contactText}>{item.ownerEmail}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Vehículos',
-          headerRight: () => (
-            <TouchableOpacity onPress={() => setModalVisible(true)}>
-              <Plus size={24} color="#2563eb" />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <ScrollView contentContainerStyle={styles.content}>
-      {vehicles.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Car size={64} color="#d1d5db" />
-          <Text style={styles.emptyTitle}>No hay vehículos registrados</Text>
-          <Text style={styles.emptyText}>
-            Los vehículos aparecerán aquí cuando se registren
-          </Text>
+      <View style={styles.header}>
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#9ca3af" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar vehículos..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
         </View>
-      ) : (
-        vehicles.map((vehicle) => (
-          <View key={vehicle.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.iconContainer}>
-                <Car size={24} color="#2563eb" />
-              </View>
-              <View style={styles.vehicleInfo}>
-                <Text style={styles.vehicleTitle}>
-                  {vehicle.brand} {vehicle.model}
-                </Text>
-                <Text style={styles.vehiclePlate}>{vehicle.plate}</Text>
-              </View>
-            </View>
+        <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)}>
+          <Plus size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
 
-            <View style={styles.cardBody}>
-              <View style={styles.detailRow}>
-                <Text style={styles.label}>VIN:</Text>
-                <Text style={styles.value}>{vehicle.vin}</Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={styles.label}>Año:</Text>
-                <Text style={styles.value}>{vehicle.year}</Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Text style={styles.label}>Kilometraje:</Text>
-                <Text style={styles.value}>{vehicle.currentKm.toLocaleString()} km</Text>
-              </View>
-
-              <View style={styles.divider} />
-
-              <View style={styles.ownerSection}>
-                <Text style={styles.ownerTitle}>Propietario</Text>
-                <Text style={styles.ownerName}>{vehicle.ownerName}</Text>
-
-                <View style={styles.contactRow}>
-                  <Phone size={16} color="#6b7280" />
-                  <Text style={styles.contactText}>{vehicle.ownerPhone}</Text>
-                </View>
-
-                {vehicle.ownerEmail && (
-                  <View style={styles.contactRow}>
-                    <Mail size={16} color="#6b7280" />
-                    <Text style={styles.contactText}>{vehicle.ownerEmail}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
+      <FlatList
+        data={filteredVehicles}
+        renderItem={renderVehicle}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Car size={64} color="#d1d5db" />
+            <Text style={styles.emptyTitle}>No hay vehículos registrados</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery
+                ? 'No se encontraron vehículos con ese criterio'
+                : 'Presiona el botón + para agregar un nuevo vehículo'}
+            </Text>
           </View>
-        ))
-      )}
-    </ScrollView>
+        }
+      />
 
       <Modal
         visible={modalVisible}
@@ -326,7 +347,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
-  content: {
+  header: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+  },
+  addButton: {
+    backgroundColor: '#2563eb',
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listContent: {
     padding: 16,
   },
   emptyState: {

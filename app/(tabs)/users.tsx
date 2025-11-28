@@ -10,8 +10,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { Stack } from 'expo-router';
-import { Plus, UserPlus, Trash2, Edit, Shield, Wrench, User as UserIcon } from 'lucide-react-native';
+import { Plus, UserPlus, Trash2, Edit, Shield, Wrench, User as UserIcon, Search } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUsers } from '@/contexts/UsersContext';
 import { User, UserRole } from '@/types';
@@ -19,6 +18,7 @@ import { User, UserRole } from '@/types';
 export default function UsersScreen() {
   const { isAdmin } = useAuth();
   const { users, addUser, updateUser, deleteUser } = useUsers();
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<{
@@ -142,10 +142,19 @@ export default function UsersScreen() {
     }
   };
 
+  const filteredUsers = searchQuery
+    ? users.filter(
+        (u) =>
+          u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (u.phone && u.phone.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          getRoleLabel(u.role).toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : users;
+
   if (!isAdmin) {
     return (
       <View style={styles.container}>
-        <Stack.Screen options={{ title: 'Usuarios' }} />
         <View style={styles.noAccessContainer}>
           <Shield size={48} color="#dc2626" />
           <Text style={styles.noAccessTitle}>Acceso Restringido</Text>
@@ -196,26 +205,34 @@ export default function UsersScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Usuarios',
-          headerRight: () => (
-            <TouchableOpacity onPress={() => handleOpenModal()}>
-              <Plus size={24} color="#2563eb" />
-            </TouchableOpacity>
-          ),
-        }}
-      />
+      <View style={styles.header}>
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#9ca3af" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar usuarios..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+        <TouchableOpacity style={styles.addButton} onPress={() => handleOpenModal()}>
+          <Plus size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
 
       <FlatList
-        data={users}
+        data={filteredUsers}
         renderItem={renderUser}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <UserPlus size={48} color="#9ca3af" />
-            <Text style={styles.emptyText}>No hay usuarios registrados</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery
+                ? 'No se encontraron usuarios con ese criterio'
+                : 'Presiona el botón + para crear un nuevo usuario'}
+            </Text>
           </View>
         }
       />
@@ -317,6 +334,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
+  },
+  header: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+  },
+  addButton: {
+    backgroundColor: '#2563eb',
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   noAccessContainer: {
     flex: 1,

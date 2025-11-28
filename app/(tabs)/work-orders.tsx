@@ -10,20 +10,20 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown } from 'lucide-react-native';
+import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search } from 'lucide-react-native';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useUsers } from '@/contexts/UsersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendStatusUpdate, sendBudget } from '@/utils/whatsapp';
 import { WorkOrderStatus, WorkOrderItem } from '@/types';
-import { Stack } from 'expo-router';
 
 export default function WorkOrdersScreen() {
   const { workOrders, updateWorkOrderStatus, addWorkOrder } = useWorkOrders();
   const { vehicles, getVehicleById } = useVehicles();
   const { getMechanics, getUserById } = useUsers();
   const { user } = useAuth();
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showVehicleSelector, setShowVehicleSelector] = useState<boolean>(false);
@@ -51,6 +51,24 @@ export default function WorkOrdersScreen() {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }, [workOrders]);
+
+  const filteredOrders = useMemo(() => {
+    if (!searchQuery) return sortedOrders;
+    return sortedOrders.filter((order) => {
+      const vehicle = getVehicleById(order.vehicleId);
+      const mechanic = order.assignedTo ? getUserById(order.assignedTo) : null;
+      return (
+        order.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        order.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (vehicle &&
+          (vehicle.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            vehicle.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            vehicle.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            vehicle.ownerName.toLowerCase().includes(searchQuery.toLowerCase()))) ||
+        (mechanic && mechanic.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    });
+  }, [sortedOrders, searchQuery, getVehicleById, getUserById]);
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -188,151 +206,162 @@ export default function WorkOrdersScreen() {
   const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
   const selectedMechanic = mechanics.find(m => m.id === formData.assignedTo);
 
+  const renderWorkOrder = ({ item: order }: { item: typeof workOrders[0] }) => {
+    const vehicle = getVehicleById(order.vehicleId);
+    const assignedMechanic = order.assignedTo ? getUserById(order.assignedTo) : null;
+    const isSending = sendingId === order.id;
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.orderCode}>{order.code}</Text>
+            <TouchableOpacity onPress={() => handleChangeStatus(order.id, order.status)}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: getStatusColor(order.status) + '20' },
+                ]}
+              >
+                <Text
+                  style={[styles.statusText, { color: getStatusColor(order.status) }]}
+                >
+                  {getStatusText(order.status)}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {vehicle && (
+          <View style={styles.vehicleSection}>
+            <Text style={styles.vehicleText}>
+              {vehicle.brand} {vehicle.model} - {vehicle.plate}
+            </Text>
+            <Text style={styles.ownerText}>{vehicle.ownerName}</Text>
+          </View>
+        )}
+
+        {assignedMechanic && (
+          <View style={styles.mechanicSection}>
+            <View style={styles.mechanicRow}>
+              <User size={16} color="#6b7280" />
+              <Text style={styles.mechanicLabel}>Asignado a:</Text>
+              <Text style={styles.mechanicName}>{assignedMechanic.name}</Text>
+            </View>
+          </View>
+        )}
+
+        <Text style={styles.description}>{order.description}</Text>
+
+        {order.diagnosis && (
+          <View style={styles.diagnosisSection}>
+            <Text style={styles.diagnosisLabel}>Diagnóstico:</Text>
+            <Text style={styles.diagnosisText}>{order.diagnosis}</Text>
+          </View>
+        )}
+
+        {order.items.length > 0 && (
+          <View style={styles.itemsSection}>
+            <Text style={styles.itemsLabel}>Trabajos ({order.items.length}):</Text>
+            {order.items.slice(0, 3).map((item) => (
+              <View key={item.id} style={styles.itemRow}>
+                <Text style={styles.itemDescription} numberOfLines={1}>
+                  {item.description}
+                </Text>
+                <Text style={styles.itemPrice}>${item.total}</Text>
+              </View>
+            ))}
+            {order.items.length > 3 && (
+              <Text style={styles.moreItems}>
+                +{order.items.length - 3} más...
+              </Text>
+            )}
+          </View>
+        )}
+
+        <View style={styles.footer}>
+          <View style={styles.totalSection}>
+            <Text style={styles.totalLabel}>Total:</Text>
+            <Text style={styles.totalAmount}>${order.totalCost}</Text>
+          </View>
+
+          <View style={styles.actions}>
+            {order.items.length > 0 && order.status !== 'completed' && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.budgetButton, isSending && styles.buttonDisabled]}
+                onPress={() => handleSendBudget(order.id)}
+                disabled={isSending}
+              >
+                <FileText size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Enviar Presupuesto</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.statusButton, isSending && styles.buttonDisabled]}
+              onPress={() => handleSendStatusUpdate(order.id)}
+              disabled={isSending}
+            >
+              <MessageCircle size={16} color="#fff" />
+              <Text style={styles.actionButtonText}>
+                {isSending ? 'Enviando...' : 'Notificar Estado'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.dateSection}>
+          <Text style={styles.dateText}>
+            Creado: {new Date(order.createdAt).toLocaleDateString('es-ES')}
+          </Text>
+          {order.completedAt && (
+            <View style={styles.completedBadge}>
+              <CheckCircle2 size={14} color="#059669" />
+              <Text style={styles.completedText}>
+                Completado: {new Date(order.completedAt).toLocaleDateString('es-ES')}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.wrapper}>
-      <Stack.Screen
-        options={{
-          title: 'Órdenes de Trabajo',
-          headerRight: () => (
-            <TouchableOpacity onPress={handleOpenModal}>
-              <Plus size={24} color="#2563eb" />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {sortedOrders.length === 0 ? (
-        <View style={styles.emptyState}>
-          <FileText size={64} color="#d1d5db" />
-          <Text style={styles.emptyTitle}>No hay órdenes de trabajo</Text>
-          <Text style={styles.emptyText}>
-            Las órdenes de trabajo aparecerán aquí cuando se creen
-          </Text>
+      <View style={styles.header}>
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#9ca3af" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar órdenes..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
         </View>
-      ) : (
-        sortedOrders.map((order) => {
-          const vehicle = getVehicleById(order.vehicleId);
-          const assignedMechanic = order.assignedTo ? getUserById(order.assignedTo) : null;
-          const isSending = sendingId === order.id;
+        <TouchableOpacity style={styles.addButton} onPress={handleOpenModal}>
+          <Plus size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
 
-          return (
-            <View key={order.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={styles.headerLeft}>
-                  <Text style={styles.orderCode}>{order.code}</Text>
-                  <TouchableOpacity onPress={() => handleChangeStatus(order.id, order.status)}>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        { backgroundColor: getStatusColor(order.status) + '20' },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.statusText, { color: getStatusColor(order.status) }]}
-                      >
-                        {getStatusText(order.status)}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {vehicle && (
-                <View style={styles.vehicleSection}>
-                  <Text style={styles.vehicleText}>
-                    {vehicle.brand} {vehicle.model} - {vehicle.plate}
-                  </Text>
-                  <Text style={styles.ownerText}>{vehicle.ownerName}</Text>
-                </View>
-              )}
-
-              {assignedMechanic && (
-                <View style={styles.mechanicSection}>
-                  <View style={styles.mechanicRow}>
-                    <User size={16} color="#6b7280" />
-                    <Text style={styles.mechanicLabel}>Asignado a:</Text>
-                    <Text style={styles.mechanicName}>{assignedMechanic.name}</Text>
-                  </View>
-                </View>
-              )}
-
-              <Text style={styles.description}>{order.description}</Text>
-
-              {order.diagnosis && (
-                <View style={styles.diagnosisSection}>
-                  <Text style={styles.diagnosisLabel}>Diagnóstico:</Text>
-                  <Text style={styles.diagnosisText}>{order.diagnosis}</Text>
-                </View>
-              )}
-
-              {order.items.length > 0 && (
-                <View style={styles.itemsSection}>
-                  <Text style={styles.itemsLabel}>Trabajos ({order.items.length}):</Text>
-                  {order.items.slice(0, 3).map((item) => (
-                    <View key={item.id} style={styles.itemRow}>
-                      <Text style={styles.itemDescription} numberOfLines={1}>
-                        {item.description}
-                      </Text>
-                      <Text style={styles.itemPrice}>${item.total}</Text>
-                    </View>
-                  ))}
-                  {order.items.length > 3 && (
-                    <Text style={styles.moreItems}>
-                      +{order.items.length - 3} más...
-                    </Text>
-                  )}
-                </View>
-              )}
-
-              <View style={styles.footer}>
-                <View style={styles.totalSection}>
-                  <Text style={styles.totalLabel}>Total:</Text>
-                  <Text style={styles.totalAmount}>${order.totalCost}</Text>
-                </View>
-
-                <View style={styles.actions}>
-                  {order.items.length > 0 && order.status !== 'completed' && (
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.budgetButton, isSending && styles.buttonDisabled]}
-                      onPress={() => handleSendBudget(order.id)}
-                      disabled={isSending}
-                    >
-                      <FileText size={16} color="#fff" />
-                      <Text style={styles.actionButtonText}>Enviar Presupuesto</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.statusButton, isSending && styles.buttonDisabled]}
-                    onPress={() => handleSendStatusUpdate(order.id)}
-                    disabled={isSending}
-                  >
-                    <MessageCircle size={16} color="#fff" />
-                    <Text style={styles.actionButtonText}>
-                      {isSending ? 'Enviando...' : 'Notificar Estado'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.dateSection}>
-                <Text style={styles.dateText}>
-                  Creado: {new Date(order.createdAt).toLocaleDateString('es-ES')}
-                </Text>
-                {order.completedAt && (
-                  <View style={styles.completedBadge}>
-                    <CheckCircle2 size={14} color="#059669" />
-                    <Text style={styles.completedText}>
-                      Completado: {new Date(order.completedAt).toLocaleDateString('es-ES')}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          );
-        })
-      )}
-    </ScrollView>
+      <FlatList
+        data={filteredOrders}
+        renderItem={renderWorkOrder}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <FileText size={64} color="#d1d5db" />
+            <Text style={styles.emptyTitle}>No hay órdenes de trabajo</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery
+                ? 'No se encontraron órdenes con ese criterio'
+                : 'Presiona el botón + para crear una nueva orden'}
+            </Text>
+          </View>
+        }
+      />
 
       <Modal
         visible={modalVisible}
@@ -544,11 +573,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
+  header: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
-  content: {
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+  },
+  addButton: {
+    backgroundColor: '#2563eb',
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listContent: {
     padding: 16,
   },
   emptyState: {
