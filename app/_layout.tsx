@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { VehiclesProvider } from "@/contexts/VehiclesContext";
 import { WorkOrdersProvider } from "@/contexts/WorkOrdersContext";
 import { ClientsProvider } from "@/contexts/ClientsContext";
+import { trpc, trpcClient } from "@/lib/trpc";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,20 +30,22 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <UsersProvider>
-          <AuthProvider>
-            <ClientsProvider>
-              <VehiclesProvider>
-                <WorkOrdersProvider>
-                  <RootLayoutNav />
-                </WorkOrdersProvider>
-              </VehiclesProvider>
-            </ClientsProvider>
-          </AuthProvider>
-        </UsersProvider>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <UsersProvider>
+            <AuthProvider>
+              <ClientsProvider>
+                <VehiclesProvider>
+                  <WorkOrdersProvider>
+                    <RootLayoutNav />
+                  </WorkOrdersProvider>
+                </VehiclesProvider>
+              </ClientsProvider>
+            </AuthProvider>
+          </UsersProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </trpc.Provider>
   );
 }
