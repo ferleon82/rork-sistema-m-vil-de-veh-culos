@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useState } from 'react';
-import { WorkOrder, WorkOrderStatus, WorkOrderItem } from '@/types';
+import { WorkOrder, WorkOrderStatus } from '@/types';
 
 const STORAGE_KEY = '@work_orders';
 
