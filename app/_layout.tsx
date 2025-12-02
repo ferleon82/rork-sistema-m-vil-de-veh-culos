@@ -34,15 +34,15 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <UsersProvider>
-            <AuthProvider>
-              <ClientsProvider>
-                <VehiclesProvider>
-                  <WorkOrdersProvider>
+            <ClientsProvider>
+              <VehiclesProvider>
+                <WorkOrdersProvider>
+                  <AuthProvider>
                     <RootLayoutNav />
-                  </WorkOrdersProvider>
-                </VehiclesProvider>
-              </ClientsProvider>
-            </AuthProvider>
+                  </AuthProvider>
+                </WorkOrdersProvider>
+              </VehiclesProvider>
+            </ClientsProvider>
           </UsersProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
