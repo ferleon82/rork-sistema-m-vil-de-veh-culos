@@ -33,17 +33,17 @@ export default function RootLayout() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <UsersProvider>
-            <ClientsProvider>
-              <VehiclesProvider>
-                <WorkOrdersProvider>
-                  <AuthProvider>
+          <AuthProvider>
+            <UsersProvider>
+              <ClientsProvider>
+                <VehiclesProvider>
+                  <WorkOrdersProvider>
                     <RootLayoutNav />
-                  </AuthProvider>
-                </WorkOrdersProvider>
-              </VehiclesProvider>
-            </ClientsProvider>
-          </UsersProvider>
+                  </WorkOrdersProvider>
+                </VehiclesProvider>
+              </ClientsProvider>
+            </UsersProvider>
+          </AuthProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
     </trpc.Provider>

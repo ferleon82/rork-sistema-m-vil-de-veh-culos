@@ -3,9 +3,26 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { User } from '@/types';
-import { useUsers } from './UsersContext';
 
 const STORAGE_KEY = '@auth_user';
+const USERS_STORAGE_KEY = '@users';
+
+const INITIAL_USERS: User[] = [
+  {
+    id: '1',
+    email: 'admin@taller.com',
+    name: 'Administrador',
+    role: 'admin',
+    phone: '+1234567890',
+  },
+  {
+    id: '2',
+    email: 'tecnico@taller.com',
+    name: 'Técnico Juan',
+    role: 'technician',
+    phone: '+1234567891',
+  },
+];
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
@@ -42,18 +59,24 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   };
 
-  const { authenticateUser } = useUsers();
-
   const login = async (email: string, password: string): Promise<boolean> => {
-    const foundUser = authenticateUser(email, password);
-    
-    if (foundUser) {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(foundUser));
-      setUser(foundUser);
-      return true;
+    try {
+      const storedUsers = await AsyncStorage.getItem(USERS_STORAGE_KEY);
+      const users: User[] = storedUsers ? JSON.parse(storedUsers) : INITIAL_USERS;
+      
+      const foundUser = users.find((u) => u.email === email);
+      
+      if (foundUser && password === 'admin123') {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(foundUser));
+        setUser(foundUser);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error during login:', error);
+      return false;
     }
-    
-    return false;
   };
 
   const logout = async () => {
