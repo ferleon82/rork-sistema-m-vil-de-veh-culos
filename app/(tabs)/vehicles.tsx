@@ -1,13 +1,41 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, FlatList } from 'react-native';
-import { Car, Phone, Mail, Plus, ChevronDown, Search, Shield } from 'lucide-react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Alert,
+  FlatList,
+} from 'react-native';
+import { Car, Phone, Mail, Plus, ChevronDown, Search, Shield, Edit, Trash2 } from 'lucide-react-native';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useClients } from '@/contexts/ClientsContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { Client } from '@/types';
+import { Client, Vehicle } from '@/types';
+
+interface VehicleFormState {
+  vin: string;
+  plate: string;
+  brand: string;
+  model: string;
+  year: string;
+  currentKm: string;
+}
+
+const createInitialFormState = (): VehicleFormState => ({
+  vin: '',
+  plate: '',
+  brand: '',
+  model: '',
+  year: '',
+  currentKm: '',
+});
 
 export default function VehiclesScreen() {
-  const { vehicles, addVehicle } = useVehicles();
+  const { vehicles, addVehicle, updateVehicle, deleteVehicle } = useVehicles();
   const { clients } = useClients();
   const { permissions } = useAuth();
   const canManageVehicles = permissions.canManageVehicles;
@@ -15,21 +43,55 @@ export default function VehiclesScreen() {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [clientSelectorVisible, setClientSelectorVisible] = useState<boolean>(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [formData, setFormData] = useState<{
-    vin: string;
-    plate: string;
-    brand: string;
-    model: string;
-    year: string;
-    currentKm: string;
-  }>({
-    vin: '',
-    plate: '',
-    brand: '',
-    model: '',
-    year: '',
-    currentKm: '',
-  });
+  const [formData, setFormData] = useState<VehicleFormState>(createInitialFormState());
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+
+  const resetForm = () => {
+    setFormData(createInitialFormState());
+    setSelectedClient(null);
+    setEditingVehicle(null);
+  };
+
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    setClientSelectorVisible(false);
+    resetForm();
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setModalVisible(true);
+  };
+
+  const resolveClientFromVehicle = (vehicle: Vehicle): Client => {
+    const existing = clients.find((client) => client.id === vehicle.clientId);
+    if (existing) {
+      return existing;
+    }
+
+    return {
+      id: vehicle.clientId,
+      name: vehicle.ownerName,
+      phone: vehicle.ownerPhone,
+      countryCode: 'SV',
+      email: vehicle.ownerEmail,
+      createdAt: vehicle.createdAt,
+    };
+  };
+
+  const openEditModal = (vehicle: Vehicle) => {
+    setEditingVehicle(vehicle);
+    setFormData({
+      vin: vehicle.vin,
+      plate: vehicle.plate,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      year: vehicle.year.toString(),
+      currentKm: vehicle.currentKm.toString(),
+    });
+    setSelectedClient(resolveClientFromVehicle(vehicle));
+    setModalVisible(true);
+  };
 
   const handleSubmit = async () => {
     if (!selectedClient) {
@@ -42,8 +104,8 @@ export default function VehiclesScreen() {
       return;
     }
 
-    const year = parseInt(formData.year);
-    const currentKm = parseInt(formData.currentKm);
+    const year = parseInt(formData.year, 10);
+    const currentKm = parseInt(formData.currentKm, 10);
 
     if (isNaN(year) || year < 1900 || year > new Date().getFullYear() + 1) {
       Alert.alert('Error', 'Año inválido');
@@ -56,7 +118,7 @@ export default function VehiclesScreen() {
     }
 
     try {
-      await addVehicle({
+      const payload = {
         vin: formData.vin,
         plate: formData.plate,
         brand: formData.brand,
@@ -67,21 +129,43 @@ export default function VehiclesScreen() {
         ownerName: selectedClient.name,
         ownerPhone: selectedClient.phone,
         ownerEmail: selectedClient.email,
-      });
-      Alert.alert('Éxito', 'Vehículo registrado correctamente');
-      setModalVisible(false);
-      setSelectedClient(null);
-      setFormData({
-        vin: '',
-        plate: '',
-        brand: '',
-        model: '',
-        year: '',
-        currentKm: '',
-      });
-    } catch {
-      Alert.alert('Error', 'No se pudo registrar el vehículo');
+      };
+
+      if (editingVehicle) {
+        console.log('[Vehicles] Updating vehicle', editingVehicle.id);
+        await updateVehicle(editingVehicle.id, payload);
+        Alert.alert('Éxito', 'Vehículo actualizado correctamente');
+      } else {
+        console.log('[Vehicles] Creating new vehicle');
+        await addVehicle(payload);
+        Alert.alert('Éxito', 'Vehículo registrado correctamente');
+      }
+
+      handleCloseModal();
+    } catch (error) {
+      console.error('[Vehicles] Error saving vehicle', error);
+      Alert.alert('Error', 'No se pudo guardar el vehículo');
     }
+  };
+
+  const handleDeleteVehicle = (vehicle: Vehicle) => {
+    Alert.alert('Eliminar vehículo', `¿Deseas eliminar ${vehicle.brand} ${vehicle.model}?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            console.log('[Vehicles] Deleting vehicle', vehicle.id);
+            await deleteVehicle(vehicle.id);
+            Alert.alert('Éxito', 'Vehículo eliminado');
+          } catch (error) {
+            console.error('[Vehicles] Error deleting vehicle', error);
+            Alert.alert('Error', 'No se pudo eliminar el vehículo');
+          }
+        },
+      },
+    ]);
   };
 
   const handleSelectClient = (client: Client) => {
@@ -90,9 +174,7 @@ export default function VehiclesScreen() {
   };
 
   const handlePlateChange = (value: string) => {
-    const formatted = value
-      .toUpperCase()
-      .replace(/[^A-Z0-9\-_.\s]/g, '');
+    const formatted = value.toUpperCase().replace(/[^A-Z0-9\-_.\s]/g, '');
     setFormData((prev) => ({ ...prev, plate: formatted }));
   };
 
@@ -102,7 +184,7 @@ export default function VehiclesScreen() {
           v.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
           v.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
           v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.ownerName.toLowerCase().includes(searchQuery.toLowerCase())
+          v.ownerName.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : vehicles;
 
@@ -118,7 +200,7 @@ export default function VehiclesScreen() {
     );
   }
 
-  const renderVehicle = ({ item }: { item: typeof vehicles[0] }) => (
+  const renderVehicle = ({ item }: { item: Vehicle }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.iconContainer}>
@@ -129,6 +211,22 @@ export default function VehiclesScreen() {
             {item.brand} {item.model}
           </Text>
           <Text style={styles.vehiclePlate}>{item.plate}</Text>
+        </View>
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            onPress={() => openEditModal(item)}
+            style={styles.actionButton}
+            testID={`vehicle-edit-${item.id}`}
+          >
+            <Edit size={20} color="#2563eb" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleDeleteVehicle(item)}
+            style={styles.actionButton}
+            testID={`vehicle-delete-${item.id}`}
+          >
+            <Trash2 size={20} color="#ef4444" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -182,7 +280,11 @@ export default function VehiclesScreen() {
             onChangeText={setSearchQuery}
           />
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)}>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={openAddModal}
+          testID="add-vehicle-button"
+        >
           <Plus size={24} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -192,6 +294,7 @@ export default function VehiclesScreen() {
         renderItem={renderVehicle}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        testID="vehicles-list"
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Car size={64} color="#d1d5db" />
@@ -209,12 +312,14 @@ export default function VehiclesScreen() {
         visible={modalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={handleCloseModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView>
-              <Text style={styles.modalTitle}>Registrar Vehículo de Entrada</Text>
+              <Text style={styles.modalTitle}>
+                {editingVehicle ? 'Editar Vehículo' : 'Registrar Vehículo de Entrada'}
+              </Text>
 
               <Text style={styles.label}>Placa *</Text>
               <TextInput
@@ -288,6 +393,7 @@ export default function VehiclesScreen() {
               <TouchableOpacity
                 style={styles.clientSelector}
                 onPress={() => setClientSelectorVisible(true)}
+                testID="vehicle-client-selector"
               >
                 {selectedClient ? (
                   <View>
@@ -309,7 +415,7 @@ export default function VehiclesScreen() {
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.cancelButton]}
-                  onPress={() => setModalVisible(false)}
+                  onPress={handleCloseModal}
                 >
                   <Text style={styles.cancelButtonText}>Cancelar</Text>
                 </TouchableOpacity>
@@ -317,8 +423,11 @@ export default function VehiclesScreen() {
                 <TouchableOpacity
                   style={[styles.modalButton, styles.submitButton]}
                   onPress={handleSubmit}
+                  testID="vehicle-submit-button"
                 >
-                  <Text style={styles.submitButtonText}>Registrar</Text>
+                  <Text style={styles.submitButtonText}>
+                    {editingVehicle ? 'Actualizar' : 'Registrar'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -341,6 +450,7 @@ export default function VehiclesScreen() {
                   key={client.id}
                   style={styles.clientItem}
                   onPress={() => handleSelectClient(client)}
+                  testID={`vehicle-client-option-${client.id}`}
                 >
                   <View>
                     <Text style={styles.clientItemName}>{client.name}</Text>
@@ -481,6 +591,13 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#2563eb',
     letterSpacing: 1,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  actionButton: {
+    padding: 6,
   },
   cardBody: {
     padding: 16,
