@@ -10,7 +10,7 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search, Edit3, ShieldAlert, Trash2 } from 'lucide-react-native';
+import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search, Edit, ShieldAlert, Trash2 } from 'lucide-react-native';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useUsers } from '@/contexts/UsersContext';
@@ -325,14 +325,14 @@ export default function WorkOrdersScreen() {
                 style={styles.actionIconButton}
                 testID={`edit-work-order-${order.id}`}
               >
-                <Edit3 size={18} color="#2563eb" />
+                <Edit size={20} color="#2563eb" />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => handleDeleteOrder(order)}
                 style={styles.actionIconButton}
                 testID={`delete-work-order-${order.id}`}
               >
-                <Trash2 size={18} color="#ef4444" />
+                <Trash2 size={20} color="#ef4444" />
               </TouchableOpacity>
             </View>
           )}
