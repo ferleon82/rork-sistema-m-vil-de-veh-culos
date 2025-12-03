@@ -7,6 +7,8 @@ import { User, UserRole } from '@/types';
 const STORAGE_KEY = '@auth_user';
 const USERS_STORAGE_KEY = '@users';
 
+const DEFAULT_PASSWORD = 'admin123';
+
 const INITIAL_USERS: User[] = [
   {
     id: '1',
@@ -15,6 +17,7 @@ const INITIAL_USERS: User[] = [
     role: 'admin',
     countryCode: 'SV',
     phone: '+50312345678',
+    password: DEFAULT_PASSWORD,
   },
   {
     id: '2',
@@ -23,6 +26,7 @@ const INITIAL_USERS: User[] = [
     role: 'technician',
     countryCode: 'SV',
     phone: '+50387654321',
+    password: DEFAULT_PASSWORD,
   },
   {
     id: '3',
@@ -31,6 +35,7 @@ const INITIAL_USERS: User[] = [
     role: 'mechanic',
     countryCode: 'SV',
     phone: '+50399887766',
+    password: DEFAULT_PASSWORD,
   },
 ];
 
@@ -123,7 +128,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       
       const foundUser = users.find((u) => u.email === email);
       
-      if (foundUser && password === 'admin123') {
+      if (foundUser && foundUser.password === password) {
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(foundUser));
         setUser(foundUser);
         return true;

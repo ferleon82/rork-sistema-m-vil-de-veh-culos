@@ -33,6 +33,8 @@ type UserFormData = {
   phone: string;
   countryCode: string;
   role: UserRole;
+  password: string;
+  confirmPassword: string;
 };
 
 export default function UsersScreen() {
@@ -50,6 +52,8 @@ export default function UsersScreen() {
     phone: '',
     countryCode: 'SV',
     role: 'mechanic',
+    password: '',
+    confirmPassword: '',
   });
 
   if (!canManageUsers) {
@@ -79,6 +83,8 @@ export default function UsersScreen() {
         phone: user.phone || '',
         countryCode: user.countryCode,
         role: user.role,
+        password: '',
+        confirmPassword: '',
       });
     } else {
       setEditingUser(null);
@@ -88,6 +94,8 @@ export default function UsersScreen() {
         phone: '',
         countryCode: 'SV',
         role: 'mechanic',
+        password: '',
+        confirmPassword: '',
       });
     }
     setModalVisible(true);
@@ -106,6 +114,33 @@ export default function UsersScreen() {
       return;
     }
 
+    const trimmedPassword = formData.password.trim();
+    const trimmedConfirm = formData.confirmPassword.trim();
+    const isEditing = Boolean(editingUser);
+
+    if (!isEditing && trimmedPassword.length < 6) {
+      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
+    if (trimmedPassword || trimmedConfirm) {
+      if (trimmedPassword.length < 6) {
+        Alert.alert('Error', 'La nueva contraseña debe tener al menos 6 caracteres');
+        return;
+      }
+      if (trimmedPassword !== trimmedConfirm) {
+        Alert.alert('Error', 'Las contraseñas no coinciden');
+        return;
+      }
+    }
+
+    const passwordToPersist = trimmedPassword || editingUser?.password || '';
+
+    if (!passwordToPersist) {
+      Alert.alert('Error', 'Debes definir una contraseña para este usuario');
+      return;
+    }
+
     try {
       const payload: Omit<User, 'id'> = {
         name: formData.name.trim(),
@@ -113,6 +148,7 @@ export default function UsersScreen() {
         role: formData.role,
         countryCode: formData.countryCode,
         phone: formData.phone ? formData.phone : undefined,
+        password: passwordToPersist,
       };
 
       if (editingUser) {
@@ -424,6 +460,29 @@ export default function UsersScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={styles.label}>Credenciales de acceso</Text>
+              <Text style={styles.helperText}>
+                Define una contraseña segura para que el usuario pueda iniciar sesión en Drivvo
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={formData.password}
+                onChangeText={(text) => setFormData({ ...formData, password: text })}
+                placeholder={editingUser ? 'Nueva contraseña (opcional)' : 'Contraseña'}
+                placeholderTextColor="#9ca3af"
+                secureTextEntry
+                testID="user-password-input"
+              />
+              <TextInput
+                style={[styles.input, { marginTop: 12 }]}
+                value={formData.confirmPassword}
+                onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
+                placeholder="Confirmar contraseña"
+                placeholderTextColor="#9ca3af"
+                secureTextEntry
+                testID="user-password-confirm-input"
+              />
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -767,6 +826,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500' as const,
     color: '#6b7280',
+  },
+  helperText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 12,
   },
   modalButtons: {
     flexDirection: 'row',

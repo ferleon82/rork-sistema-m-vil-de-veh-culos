@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { VehiclesProvider } from "@/contexts/VehiclesContext";
 import { WorkOrdersProvider } from "@/contexts/WorkOrdersContext";
 import { ClientsProvider } from "@/contexts/ClientsContext";
+import { WorkshopsProvider } from "@/contexts/WorkshopsContext";
 import { trpc, trpcClient } from "@/lib/trpc";
 
 SplashScreen.preventAutoHideAsync();
@@ -35,13 +36,15 @@ export default function RootLayout() {
         <GestureHandlerRootView style={{ flex: 1 }}>
           <AuthProvider>
             <UsersProvider>
-              <ClientsProvider>
-                <VehiclesProvider>
-                  <WorkOrdersProvider>
-                    <RootLayoutNav />
-                  </WorkOrdersProvider>
-                </VehiclesProvider>
-              </ClientsProvider>
+              <WorkshopsProvider>
+                <ClientsProvider>
+                  <VehiclesProvider>
+                    <WorkOrdersProvider>
+                      <RootLayoutNav />
+                    </WorkOrdersProvider>
+                  </VehiclesProvider>
+                </ClientsProvider>
+              </WorkshopsProvider>
             </UsersProvider>
           </AuthProvider>
         </GestureHandlerRootView>

@@ -19,6 +19,19 @@ export interface User {
   role: UserRole;
   countryCode: string;
   phone?: string;
+  password: string;
+}
+
+export interface Workshop {
+  id: string;
+  name: string;
+  ownerId: string;
+  countryCode: string;
+  phone?: string;
+  address?: string;
+  email?: string;
+  notes?: string;
+  createdAt: string;
 }
 
 export interface Vehicle {

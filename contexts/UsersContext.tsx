@@ -6,6 +6,8 @@ import { User, UserRole } from '@/types';
 const STORAGE_KEY = '@users';
 const DEFAULT_COUNTRY_CODE = 'SV';
 
+const DEFAULT_PASSWORD = 'admin123';
+
 const INITIAL_USERS: User[] = [
   {
     id: '1',
@@ -14,6 +16,7 @@ const INITIAL_USERS: User[] = [
     role: 'admin',
     countryCode: 'SV',
     phone: '+50312345678',
+    password: DEFAULT_PASSWORD,
   },
   {
     id: '2',
@@ -22,6 +25,7 @@ const INITIAL_USERS: User[] = [
     role: 'technician',
     countryCode: 'SV',
     phone: '+50387654321',
+    password: DEFAULT_PASSWORD,
   },
   {
     id: '3',
@@ -30,6 +34,7 @@ const INITIAL_USERS: User[] = [
     role: 'mechanic',
     countryCode: 'SV',
     phone: '+50399887766',
+    password: DEFAULT_PASSWORD,
   },
 ];
 
@@ -49,6 +54,7 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
           parsedUsers.map((user) => ({
             ...user,
             countryCode: user.countryCode || DEFAULT_COUNTRY_CODE,
+            password: user.password || DEFAULT_PASSWORD,
           }))
         );
       } else {
@@ -72,6 +78,7 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
     const newUser: User = {
       ...user,
       id: Date.now().toString(),
+      password: user.password || DEFAULT_PASSWORD,
     };
     await saveUsers([...users, newUser]);
     return newUser;
@@ -79,7 +86,13 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
 
   const updateUser = async (id: string, updates: Partial<User>) => {
     const updated = users.map((u) =>
-      u.id === id ? { ...u, ...updates } : u
+      u.id === id
+        ? {
+            ...u,
+            ...updates,
+            password: updates.password || u.password,
+          }
+        : u
     );
     await saveUsers(updated);
   };
@@ -103,7 +116,7 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
 
   const authenticateUser = (email: string, password: string) => {
     const foundUser = users.find((u) => u.email === email);
-    if (foundUser && password === 'admin123') {
+    if (foundUser && foundUser.password === password) {
       return foundUser;
     }
     return null;
