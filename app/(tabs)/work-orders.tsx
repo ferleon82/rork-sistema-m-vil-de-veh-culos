@@ -10,7 +10,7 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search, Edit3, ShieldAlert } from 'lucide-react-native';
+import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search, Edit3, ShieldAlert, Trash2 } from 'lucide-react-native';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useUsers } from '@/contexts/UsersContext';
@@ -37,7 +37,7 @@ const createInitialFormState = (): WorkOrderFormState => ({
 });
 
 export default function WorkOrdersScreen() {
-  const { workOrders, updateWorkOrderStatus, addWorkOrder, updateWorkOrder } = useWorkOrders();
+  const { workOrders, updateWorkOrderStatus, addWorkOrder, updateWorkOrder, deleteWorkOrder } = useWorkOrders();
   const { vehicles, getVehicleById } = useVehicles();
   const { getMechanics, getUserById } = useUsers();
   const { user, permissions } = useAuth();
@@ -210,6 +210,29 @@ export default function WorkOrdersScreen() {
     setModalVisible(true);
   };
 
+  const handleDeleteOrder = (order: typeof workOrders[0]) => {
+    if (!canManageOrders) {
+      Alert.alert('Rol restringido', 'No puedes eliminar órdenes en tu rol actual');
+      return;
+    }
+
+    Alert.alert(
+      'Eliminar Orden',
+      `¿Seguro que deseas eliminar ${order.code}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteWorkOrder(order.id);
+            Alert.alert('Éxito', 'Orden eliminada correctamente');
+          },
+        },
+      ]
+    );
+  };
+
   const handleSubmitWorkOrder = async () => {
     if (!canManageOrders) {
       Alert.alert('Rol restringido', 'No puedes guardar cambios en órdenes');
@@ -296,14 +319,22 @@ export default function WorkOrdersScreen() {
           </View>
 
           {canManageOrders && (
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => handleEditOrder(order)}
-              testID={`edit-work-order-${order.id}`}
-            >
-              <Edit3 size={16} color="#2563eb" />
-              <Text style={styles.editButtonText}>Editar</Text>
-            </TouchableOpacity>
+            <View style={styles.orderActions}>
+              <TouchableOpacity
+                onPress={() => handleEditOrder(order)}
+                style={styles.actionIconButton}
+                testID={`edit-work-order-${order.id}`}
+              >
+                <Edit3 size={18} color="#2563eb" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleDeleteOrder(order)}
+                style={styles.actionIconButton}
+                testID={`delete-work-order-${order.id}`}
+              >
+                <Trash2 size={18} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -744,19 +775,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
   },
-  editButton: {
+  orderActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#eef2ff',
+    gap: 8,
   },
-  editButtonText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: '#2563eb',
+  actionIconButton: {
+    padding: 8,
+    borderRadius: 999,
+    backgroundColor: '#f3f4f6',
   },
   orderCode: {
     fontSize: 18,
