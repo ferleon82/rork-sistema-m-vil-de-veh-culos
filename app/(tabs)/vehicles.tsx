@@ -275,7 +275,7 @@ export default function VehiclesScreen() {
           {item.photoUrl ? (
             <Image source={{ uri: item.photoUrl }} style={styles.vehicleImage} resizeMode="cover" />
           ) : (
-            <Car size={24} color="#2563eb" />
+            <Car size={32} color="#2563eb" />
           )}
         </View>
         <View style={styles.vehicleInfo}>
@@ -689,9 +689,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f3f4f6',
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 112,
+    height: 72,
+    borderRadius: 16,
     backgroundColor: '#eff6ff',
     justifyContent: 'center',
     alignItems: 'center',
@@ -701,6 +701,7 @@ const styles = StyleSheet.create({
   vehicleImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 16,
   },
   vehicleInfo: {
     flex: 1,
