@@ -292,6 +292,7 @@ export default function WorkOrdersScreen() {
     const vehicle = getVehicleById(order.vehicleId);
     const assignedMechanic = order.assignedTo ? getUserById(order.assignedTo) : null;
     const isSending = sendingId === order.id;
+    const canUpdateOrderStatus = canManageOrders || (viewOnlyAssigned && order.assignedTo === user?.id);
 
     return (
       <View style={styles.card}>
@@ -299,14 +300,14 @@ export default function WorkOrdersScreen() {
           <View style={styles.headerLeft}>
             <Text style={styles.orderCode}>{order.code}</Text>
             <TouchableOpacity
-              onPress={() => canManageOrders && handleChangeStatus(order.id, order.status)}
-              disabled={!canManageOrders}
+              onPress={() => canUpdateOrderStatus && handleChangeStatus(order.id, order.status)}
+              disabled={!canUpdateOrderStatus}
             >
               <View
                 style={[
                   styles.statusBadge,
                   { backgroundColor: getStatusColor(order.status) + '20' },
-                  !canManageOrders && styles.statusBadgeDisabled,
+                  !canUpdateOrderStatus && styles.statusBadgeDisabled,
                 ]}
               >
                 <Text
