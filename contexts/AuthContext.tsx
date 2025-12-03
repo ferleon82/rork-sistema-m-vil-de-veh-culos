@@ -15,8 +15,8 @@ const INITIAL_USERS: User[] = [
     email: 'admin@taller.com',
     name: 'Administrador',
     role: 'admin',
-    countryCode: 'SV',
-    phone: '+50312345678',
+    countryCode: 'EC',
+    phone: '+59312345678',
     password: DEFAULT_PASSWORD,
   },
   {
@@ -24,8 +24,8 @@ const INITIAL_USERS: User[] = [
     email: 'tecnico@taller.com',
     name: 'Técnico Juan',
     role: 'technician',
-    countryCode: 'SV',
-    phone: '+50387654321',
+    countryCode: 'EC',
+    phone: '+59387654321',
     password: DEFAULT_PASSWORD,
   },
   {
@@ -33,8 +33,8 @@ const INITIAL_USERS: User[] = [
     email: 'mecanico@taller.com',
     name: 'Mecánico Pedro',
     role: 'mechanic',
-    countryCode: 'SV',
-    phone: '+50399887766',
+    countryCode: 'EC',
+    phone: '+59399887766',
     password: DEFAULT_PASSWORD,
   },
 ];

@@ -30,7 +30,7 @@ import { useUsers } from '@/contexts/UsersContext';
 import { LATIN_AMERICAN_COUNTRIES, getCountryByCode } from '@/constants/countries';
 import { Workshop } from '@/types';
 
-const DEFAULT_COUNTRY = 'SV';
+const DEFAULT_COUNTRY = 'EC';
 
 type WorkshopForm = {
   name: string;
@@ -359,7 +359,7 @@ export default function WorkshopsScreen() {
                 style={styles.input}
                 value={formData.phone}
                 onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                placeholder="+503 7000 0000"
+                placeholder="+593 99 123 4567"
                 placeholderTextColor="#9ca3af"
                 keyboardType="phone-pad"
                 testID="workshop-phone-input"

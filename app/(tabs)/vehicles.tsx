@@ -90,7 +90,7 @@ export default function VehiclesScreen() {
       id: vehicle.clientId,
       name: vehicle.ownerName,
       phone: vehicle.ownerPhone,
-      countryCode: 'SV',
+      countryCode: 'EC',
       email: vehicle.ownerEmail,
       createdAt: vehicle.createdAt,
     };

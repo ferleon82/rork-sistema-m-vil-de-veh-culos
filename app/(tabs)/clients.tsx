@@ -27,7 +27,7 @@ export default function ClientsScreen() {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    countryCode: 'SV',
+    countryCode: 'EC',
     email: '',
     address: '',
     documentNumber: '',
@@ -52,7 +52,7 @@ export default function ClientsScreen() {
     setFormData({
       name: '',
       phone: '',
-      countryCode: 'SV',
+      countryCode: 'EC',
       email: '',
       address: '',
       documentNumber: '',
@@ -394,7 +394,7 @@ export default function ClientsScreen() {
                     formData.countryCode === item.code && styles.countryItemSelected,
                   ]}
                   onPress={() => {
-                    setFormData({ ...formData, countryCode: item.code })
+                    setFormData({ ...formData, countryCode: item.code });
                     setShowCountryPicker(false);
                   }}
                 >
