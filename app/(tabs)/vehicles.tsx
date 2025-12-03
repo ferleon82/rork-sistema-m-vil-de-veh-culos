@@ -9,8 +9,23 @@ import {
   TextInput,
   Alert,
   FlatList,
+  Image,
+  Platform,
 } from 'react-native';
-import { Car, Phone, Mail, Plus, ChevronDown, Search, Shield, Edit, Trash2 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  Car,
+  Phone,
+  Mail,
+  Plus,
+  ChevronDown,
+  Search,
+  Shield,
+  Edit,
+  Trash2,
+  Camera,
+  ImageOff,
+} from 'lucide-react-native';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useClients } from '@/contexts/ClientsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +38,7 @@ interface VehicleFormState {
   model: string;
   year: string;
   currentKm: string;
+  photoUrl: string | null;
 }
 
 const createInitialFormState = (): VehicleFormState => ({
@@ -32,6 +48,7 @@ const createInitialFormState = (): VehicleFormState => ({
   model: '',
   year: '',
   currentKm: '',
+  photoUrl: null,
 });
 
 export default function VehiclesScreen() {
@@ -88,6 +105,7 @@ export default function VehiclesScreen() {
       model: vehicle.model,
       year: vehicle.year.toString(),
       currentKm: vehicle.currentKm.toString(),
+      photoUrl: vehicle.photoUrl ?? null,
     });
     setSelectedClient(resolveClientFromVehicle(vehicle));
     setModalVisible(true);
@@ -129,6 +147,7 @@ export default function VehiclesScreen() {
         ownerName: selectedClient.name,
         ownerPhone: selectedClient.phone,
         ownerEmail: selectedClient.email,
+        photoUrl: formData.photoUrl ?? undefined,
       };
 
       if (editingVehicle) {
@@ -178,6 +197,55 @@ export default function VehiclesScreen() {
     setFormData((prev) => ({ ...prev, plate: formatted }));
   };
 
+  const handleCapturePhoto = async () => {
+    try {
+      console.log('[Vehicles] Requesting camera capture');
+      if (Platform.OS === 'web') {
+        Alert.alert('Cámara no disponible', 'La cámara no está soportada en la versión web. Usa la galería.');
+        return;
+      }
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permiso requerido', 'Necesitamos acceso a la cámara para tomar la fotografía.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        console.log('[Vehicles] Photo captured');
+        setFormData((prev) => ({ ...prev, photoUrl: result.assets?.[0]?.uri ?? prev.photoUrl }));
+      }
+    } catch (error) {
+      console.error('[Vehicles] Error capturing photo', error);
+      Alert.alert('Error', 'No se pudo tomar la fotografía del vehículo');
+    }
+  };
+
+  const handlePickPhoto = async () => {
+    try {
+      console.log('[Vehicles] Opening gallery');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setFormData((prev) => ({ ...prev, photoUrl: result.assets?.[0]?.uri ?? prev.photoUrl }));
+      }
+    } catch (error) {
+      console.error('[Vehicles] Error picking photo', error);
+      Alert.alert('Error', 'No se pudo seleccionar la fotografía');
+    }
+  };
+
+  const handleClearPhoto = () => {
+    console.log('[Vehicles] Clearing captured photo');
+    setFormData((prev) => ({ ...prev, photoUrl: null }));
+  };
+
   const filteredVehicles = searchQuery
     ? vehicles.filter(
         (v) =>
@@ -204,7 +272,11 @@ export default function VehiclesScreen() {
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.iconContainer}>
-          <Car size={24} color="#2563eb" />
+          {item.photoUrl ? (
+            <Image source={{ uri: item.photoUrl }} style={styles.vehicleImage} resizeMode="cover" />
+          ) : (
+            <Car size={24} color="#2563eb" />
+          )}
         </View>
         <View style={styles.vehicleInfo}>
           <Text style={styles.vehicleTitle}>
@@ -385,6 +457,54 @@ export default function VehiclesScreen() {
                 placeholderTextColor="#9ca3af"
                 autoCapitalize="characters"
               />
+
+              <View style={styles.photoSection}>
+                <Text style={styles.sectionTitle}>Fotografía del vehículo</Text>
+                <Text style={styles.photoHint}>Captura una imagen para identificar rápidamente el vehículo.</Text>
+
+                {formData.photoUrl ? (
+                  <View style={styles.photoPreviewWrapper}>
+                    <Image
+                      source={{ uri: formData.photoUrl }}
+                      style={styles.photoPreview}
+                      resizeMode="cover"
+                    />
+                    <TouchableOpacity
+                      style={styles.removePhotoButton}
+                      onPress={handleClearPhoto}
+                      testID="vehicle-photo-remove"
+                    >
+                      <ImageOff size={18} color="#ef4444" />
+                      <Text style={styles.removePhotoText}>Eliminar foto</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Car size={32} color="#9ca3af" />
+                    <Text style={styles.photoPlaceholderText}>Sin fotografía</Text>
+                  </View>
+                )}
+
+                <View style={styles.photoActions}>
+                  <TouchableOpacity
+                    style={[styles.photoButton, styles.captureButton]}
+                    onPress={handleCapturePhoto}
+                    testID="vehicle-photo-capture"
+                  >
+                    <Camera size={18} color="#fff" />
+                    <Text style={styles.photoButtonText}>Tomar foto</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.photoButton, styles.galleryButton]}
+                    onPress={handlePickPhoto}
+                    testID="vehicle-photo-gallery"
+                  >
+                    <ImageOff size={18} color="#1f2937" />
+                    <Text style={styles.galleryButtonText}>Seleccionar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
               <View style={styles.sectionDivider} />
               <Text style={styles.sectionTitle}>Cliente</Text>
@@ -576,6 +696,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
+  },
+  vehicleImage: {
+    width: '100%',
+    height: '100%',
   },
   vehicleInfo: {
     flex: 1,
@@ -691,6 +816,80 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#1f2937',
     marginBottom: 16,
+  },
+  photoSection: {
+    marginTop: 24,
+    gap: 12,
+  },
+  photoHint: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  photoPreviewWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  photoPreview: {
+    width: '100%',
+    height: 200,
+  },
+  removePhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    backgroundColor: '#fee2e2',
+  },
+  removePhotoText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#b91c1c',
+  },
+  photoPlaceholder: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 16,
+    paddingVertical: 32,
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f9fafb',
+  },
+  photoPlaceholderText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+  photoActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  photoButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
+  captureButton: {
+    backgroundColor: '#2563eb',
+  },
+  photoButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#fff',
+  },
+  galleryButton: {
+    backgroundColor: '#e0e7ff',
+  },
+  galleryButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#1f2937',
   },
   modalButtons: {
     flexDirection: 'row',
