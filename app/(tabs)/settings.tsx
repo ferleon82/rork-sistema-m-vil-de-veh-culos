@@ -1,10 +1,21 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { User, LogOut, Shield, Info } from 'lucide-react-native';
+import { User, LogOut, Shield, Info, CheckCircle2, XCircle } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function SettingsScreen() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isTechnician, permissions } = useAuth();
+  const roleLabel = isAdmin ? 'Administrador' : isTechnician ? 'Técnico' : 'Mecánico';
+  const roleColor = isAdmin ? '#dc2626' : isTechnician ? '#2563eb' : '#059669';
+  const capabilityItems = [
+    { label: 'Crear nuevas mecánicas', enabled: permissions.canManageWorkshops },
+    { label: 'Gestionar usuarios', enabled: permissions.canManageUsers },
+    { label: 'Gestionar clientes', enabled: permissions.canManageClients },
+    { label: 'Gestionar vehículos', enabled: permissions.canManageVehicles },
+    { label: 'Crear y editar órdenes', enabled: permissions.canManageWorkOrders },
+    { label: 'Asignar órdenes a mecánicos', enabled: permissions.canAssignWorkOrders },
+    { label: 'Ver solo órdenes asignadas', enabled: permissions.viewOnlyAssignedWorkOrders },
+  ];
 
   const handleLogout = () => {
     Alert.alert(
@@ -30,9 +41,9 @@ export default function SettingsScreen() {
         <Text style={styles.userName}>{user?.name}</Text>
         <Text style={styles.userEmail}>{user?.email}</Text>
         <View style={styles.roleBadge}>
-          <Shield size={14} color={isAdmin ? '#dc2626' : '#2563eb'} />
-          <Text style={[styles.roleText, { color: isAdmin ? '#dc2626' : '#2563eb' }]}>
-            {isAdmin ? 'Administrador' : 'Técnico'}
+          <Shield size={14} color={roleColor} />
+          <Text style={[styles.roleText, { color: roleColor }]}>
+            {roleLabel}
           </Text>
         </View>
       </View>
@@ -52,6 +63,24 @@ export default function SettingsScreen() {
             <Text style={styles.infoLabel}>Modo</Text>
             <Text style={styles.infoValue}>Demo</Text>
           </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Permisos de tu rol</Text>
+        <View style={styles.permissionsCard}>
+          {capabilityItems.map((item) => (
+            <View key={item.label} style={styles.permissionRow}>
+              {item.enabled ? (
+                <CheckCircle2 size={18} color="#16a34a" />
+              ) : (
+                <XCircle size={18} color="#94a3b8" />
+              )}
+              <Text style={[styles.permissionLabel, !item.enabled && styles.permissionLabelDisabled]}>
+                {item.label}
+              </Text>
+            </View>
+          ))}
         </View>
       </View>
 
@@ -101,6 +130,7 @@ export default function SettingsScreen() {
         <View style={styles.credentialsCard}>
           <Text style={styles.credentialText}>📧 Admin: admin@taller.com</Text>
           <Text style={styles.credentialText}>📧 Técnico: tecnico@taller.com</Text>
+          <Text style={styles.credentialText}>📧 Mecánico: mecanico@taller.com</Text>
           <Text style={styles.credentialText}>🔐 Contraseña: admin123</Text>
         </View>
       </View>
@@ -207,6 +237,30 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#f3f4f6',
     marginVertical: 12,
+  },
+  permissionsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    gap: 12,
+  },
+  permissionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  permissionLabel: {
+    fontSize: 14,
+    color: '#0f172a',
+    flex: 1,
+  },
+  permissionLabelDisabled: {
+    color: '#94a3b8',
   },
   featuresCard: {
     backgroundColor: '#fff',

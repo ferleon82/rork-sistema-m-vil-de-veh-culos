@@ -1,23 +1,30 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Clock, CheckCircle2, AlertCircle, DollarSign } from 'lucide-react-native';
+import { Clock, CheckCircle2, AlertCircle, DollarSign, ShieldAlert } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
 
 export default function DashboardScreen() {
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
   const { vehicles } = useVehicles();
   const { workOrders } = useWorkOrders();
   const router = useRouter();
 
+  const scopedOrders = useMemo(() => {
+    if (!permissions.viewOnlyAssignedWorkOrders) {
+      return workOrders;
+    }
+    return workOrders.filter((order) => order.assignedTo === user?.id);
+  }, [permissions.viewOnlyAssignedWorkOrders, workOrders, user?.id]);
+
   const stats = useMemo(() => {
-    const pending = workOrders.filter((wo) => wo.status === 'pending').length;
-    const inProgress = workOrders.filter((wo) => wo.status === 'in_progress').length;
-    const waitingApproval = workOrders.filter((wo) => wo.status === 'waiting_approval').length;
-    const completed = workOrders.filter((wo) => wo.status === 'completed').length;
-    const totalRevenue = workOrders
+    const pending = scopedOrders.filter((wo) => wo.status === 'pending').length;
+    const inProgress = scopedOrders.filter((wo) => wo.status === 'in_progress').length;
+    const waitingApproval = scopedOrders.filter((wo) => wo.status === 'waiting_approval').length;
+    const completed = scopedOrders.filter((wo) => wo.status === 'completed').length;
+    const totalRevenue = scopedOrders
       .filter((wo) => wo.status === 'completed')
       .reduce((sum, wo) => sum + wo.totalCost, 0);
 
@@ -28,13 +35,18 @@ export default function DashboardScreen() {
       completed,
       totalRevenue,
     };
-  }, [workOrders]);
+  }, [scopedOrders]);
 
   const recentOrders = useMemo(() => {
-    return [...workOrders]
+    return [...scopedOrders]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5);
-  }, [workOrders]);
+  }, [scopedOrders]);
+
+  const roleCopy = user?.role === 'admin' ? 'Administrador' : user?.role === 'technician' ? 'Técnico' : 'Mecánico';
+  const emptyOrdersMessage = permissions.viewOnlyAssignedWorkOrders
+    ? 'No tienes órdenes asignadas por ahora'
+    : 'No hay órdenes de trabajo';
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -68,10 +80,20 @@ export default function DashboardScreen() {
           <Text style={styles.brandSubtitle}>Ecosistema inteligente de talleres</Text>
         </View>
         <Text style={styles.welcomeText}>Hola, {user?.name}</Text>
-        <Text style={styles.roleText}>
-          {user?.role === 'admin' ? 'Administrador' : 'Técnico'}
-        </Text>
+        <Text style={styles.roleText}>{roleCopy}</Text>
       </View>
+
+      {permissions.viewOnlyAssignedWorkOrders && (
+        <View style={styles.roleInfoCard}>
+          <ShieldAlert size={20} color="#1d4ed8" />
+          <View style={styles.roleInfoTextWrapper}>
+            <Text style={styles.roleInfoTitle}>Modo Mecánico</Text>
+            <Text style={styles.roleInfoDescription}>
+              Solo verás las órdenes que el técnico te asigne. Mantén tus estados y notificaciones al día.
+            </Text>
+          </View>
+        </View>
+      )}
 
       <View style={styles.statsGrid}>
         <View style={[styles.statCard, { backgroundColor: '#fef3c7' }]}>
@@ -109,7 +131,7 @@ export default function DashboardScreen() {
 
         {recentOrders.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No hay órdenes de trabajo</Text>
+            <Text style={styles.emptyText}>{emptyOrdersMessage}</Text>
           </View>
         ) : (
           recentOrders.map((order) => {
@@ -227,6 +249,31 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 14,
     color: '#6b7280',
+  },
+  roleInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: '#e0f2fe',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    marginBottom: 16,
+  },
+  roleInfoTextWrapper: {
+    flex: 1,
+    gap: 4,
+  },
+  roleInfoTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#0f172a',
+  },
+  roleInfoDescription: {
+    fontSize: 13,
+    color: '#1e3a8a',
+    lineHeight: 18,
   },
   statsGrid: {
     flexDirection: 'row',

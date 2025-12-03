@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, FlatList } from 'react-native';
-import { Car, Phone, Mail, Plus, ChevronDown, Search } from 'lucide-react-native';
+import { Car, Phone, Mail, Plus, ChevronDown, Search, Shield } from 'lucide-react-native';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useClients } from '@/contexts/ClientsContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Client } from '@/types';
 
 export default function VehiclesScreen() {
   const { vehicles, addVehicle } = useVehicles();
   const { clients } = useClients();
+  const { permissions } = useAuth();
+  const canManageVehicles = permissions.canManageVehicles;
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [clientSelectorVisible, setClientSelectorVisible] = useState<boolean>(false);
@@ -102,6 +105,18 @@ export default function VehiclesScreen() {
           v.ownerName.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : vehicles;
+
+  if (!canManageVehicles) {
+    return (
+      <View style={styles.restrictedContainer}>
+        <Shield size={48} color="#1d4ed8" />
+        <Text style={styles.restrictedTitle}>Acceso restringido</Text>
+        <Text style={styles.restrictedText}>
+          Este módulo solo está disponible para administradores y técnicos.
+        </Text>
+      </View>
+    );
+  }
 
   const renderVehicle = ({ item }: { item: typeof vehicles[0] }) => (
     <View style={styles.card}>
@@ -354,6 +369,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
+  },
+  restrictedContainer: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 24,
+  },
+  restrictedTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: '#0f172a',
+  },
+  restrictedText: {
+    fontSize: 16,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 22,
   },
   header: {
     flexDirection: 'row',

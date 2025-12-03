@@ -11,12 +11,15 @@ import {
   Alert,
 } from 'react-native';
 import { useClients } from '@/contexts/ClientsContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Client } from '@/types';
 import { LATIN_AMERICAN_COUNTRIES, getCountryByCode } from '@/constants/countries';
-import { Plus, Search, User, Phone, Mail, MapPin, FileText, X, Trash2, Edit, Globe } from 'lucide-react-native';
+import { Plus, Search, User, Phone, Mail, MapPin, FileText, X, Trash2, Edit, Globe, Shield } from 'lucide-react-native';
 
 export default function ClientsScreen() {
   const { clients, addClient, updateClient, deleteClient, searchClients } = useClients();
+  const { permissions } = useAuth();
+  const canManageClients = permissions.canManageClients;
   const [searchQuery, setSearchQuery] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -32,6 +35,18 @@ export default function ClientsScreen() {
   });
 
   const filteredClients = searchQuery ? searchClients(searchQuery) : clients;
+
+  if (!canManageClients) {
+    return (
+      <View style={styles.restrictedContainer}>
+        <Shield size={48} color="#1d4ed8" />
+        <Text style={styles.restrictedTitle}>Acceso restringido</Text>
+        <Text style={styles.restrictedText}>
+          Solo administradores y técnicos pueden gestionar clientes.
+        </Text>
+      </View>
+    );
+  }
 
   const resetForm = () => {
     setFormData({
@@ -400,6 +415,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
+  },
+  restrictedContainer: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 24,
+  },
+  restrictedTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: '#0f172a',
+  },
+  restrictedText: {
+    fontSize: 16,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 22,
   },
   header: {
     flexDirection: 'row',

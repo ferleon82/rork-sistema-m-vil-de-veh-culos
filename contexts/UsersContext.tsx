@@ -23,6 +23,14 @@ const INITIAL_USERS: User[] = [
     countryCode: 'SV',
     phone: '+50387654321',
   },
+  {
+    id: '3',
+    email: 'mecanico@taller.com',
+    name: 'Mecánico Pedro',
+    role: 'mechanic',
+    countryCode: 'SV',
+    phone: '+50399887766',
+  },
 ];
 
 export const [UsersProvider, useUsers] = createContextHook(() => {
@@ -90,7 +98,7 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
   };
 
   const getMechanics = () => {
-    return users.filter((u) => u.role === 'mechanic' || u.role === 'technician');
+    return users.filter((u) => u.role === 'mechanic');
   };
 
   const authenticateUser = (email: string, password: string) => {

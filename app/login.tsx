@@ -99,6 +99,7 @@ export default function LoginScreen() {
               <Text style={styles.demoTitle}>Cuentas de prueba:</Text>
               <Text style={styles.demoText}>Admin: admin@taller.com</Text>
               <Text style={styles.demoText}>Técnico: tecnico@taller.com</Text>
+              <Text style={styles.demoText}>Mecánico: mecanico@taller.com</Text>
               <Text style={styles.demoText}>Contraseña: admin123</Text>
             </View>
           </View>

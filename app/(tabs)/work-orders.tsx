@@ -10,7 +10,7 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search, Edit3 } from 'lucide-react-native';
+import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search, Edit3, ShieldAlert } from 'lucide-react-native';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useUsers } from '@/contexts/UsersContext';
@@ -40,7 +40,9 @@ export default function WorkOrdersScreen() {
   const { workOrders, updateWorkOrderStatus, addWorkOrder, updateWorkOrder } = useWorkOrders();
   const { vehicles, getVehicleById } = useVehicles();
   const { getMechanics, getUserById } = useUsers();
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
+  const canManageOrders = permissions.canManageWorkOrders;
+  const viewOnlyAssigned = permissions.viewOnlyAssignedWorkOrders;
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
@@ -51,11 +53,18 @@ export default function WorkOrdersScreen() {
   
   const mechanics = getMechanics();
 
+  const scopedOrders = useMemo(() => {
+    if (!viewOnlyAssigned) {
+      return workOrders;
+    }
+    return workOrders.filter((order) => order.assignedTo === user?.id);
+  }, [viewOnlyAssigned, workOrders, user?.id]);
+
   const sortedOrders = useMemo(() => {
-    return [...workOrders].sort(
+    return [...scopedOrders].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [workOrders]);
+  }, [scopedOrders]);
 
   const filteredOrders = useMemo(() => {
     if (!searchQuery) return sortedOrders;
@@ -167,6 +176,10 @@ export default function WorkOrdersScreen() {
   };
 
   const handleOpenModal = () => {
+    if (!canManageOrders) {
+      Alert.alert('Rol restringido', 'Solo administradores o técnicos pueden crear órdenes');
+      return;
+    }
     setFormData(createInitialFormState());
     setEditingOrderId(null);
     setModalVisible(true);
@@ -181,6 +194,10 @@ export default function WorkOrdersScreen() {
   };
 
   const handleEditOrder = (order: typeof workOrders[0]) => {
+    if (!canManageOrders) {
+      Alert.alert('Rol restringido', 'No puedes editar órdenes en tu rol actual');
+      return;
+    }
     setFormData({
       vehicleId: order.vehicleId,
       description: order.description,
@@ -194,6 +211,10 @@ export default function WorkOrdersScreen() {
   };
 
   const handleSubmitWorkOrder = async () => {
+    if (!canManageOrders) {
+      Alert.alert('Rol restringido', 'No puedes guardar cambios en órdenes');
+      return;
+    }
     if (!formData.vehicleId || !formData.description) {
       Alert.alert('Error', 'Por favor selecciona un vehículo y describe el trabajo');
       return;
@@ -254,11 +275,15 @@ export default function WorkOrdersScreen() {
         <View style={styles.cardHeader}>
           <View style={styles.headerLeft}>
             <Text style={styles.orderCode}>{order.code}</Text>
-            <TouchableOpacity onPress={() => handleChangeStatus(order.id, order.status)}>
+            <TouchableOpacity
+              onPress={() => canManageOrders && handleChangeStatus(order.id, order.status)}
+              disabled={!canManageOrders}
+            >
               <View
                 style={[
                   styles.statusBadge,
                   { backgroundColor: getStatusColor(order.status) + '20' },
+                  !canManageOrders && styles.statusBadgeDisabled,
                 ]}
               >
                 <Text
@@ -270,14 +295,16 @@ export default function WorkOrdersScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => handleEditOrder(order)}
-            testID={`edit-work-order-${order.id}`}
-          >
-            <Edit3 size={16} color="#2563eb" />
-            <Text style={styles.editButtonText}>Editar</Text>
-          </TouchableOpacity>
+          {canManageOrders && (
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => handleEditOrder(order)}
+              testID={`edit-work-order-${order.id}`}
+            >
+              <Edit3 size={16} color="#2563eb" />
+              <Text style={styles.editButtonText}>Editar</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {vehicle && (
@@ -387,14 +414,25 @@ export default function WorkOrdersScreen() {
             onChangeText={setSearchQuery}
           />
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={handleOpenModal}
-          testID="open-work-order-modal-button"
-        >
-          <Plus size={24} color="#fff" />
-        </TouchableOpacity>
+        {canManageOrders && (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleOpenModal}
+            testID="open-work-order-modal-button"
+          >
+            <Plus size={24} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
+
+      {viewOnlyAssigned && (
+        <View style={styles.permissionBanner}>
+          <ShieldAlert size={18} color="#1d4ed8" />
+          <Text style={styles.permissionText}>
+            Solo puedes ver y enviar actualizaciones de las órdenes que te asignaron.
+          </Text>
+        </View>
+      )}
 
       <FlatList
         data={filteredOrders}
@@ -404,11 +442,15 @@ export default function WorkOrdersScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <FileText size={64} color="#d1d5db" />
-            <Text style={styles.emptyTitle}>No hay órdenes de trabajo</Text>
+            <Text style={styles.emptyTitle}>
+              {viewOnlyAssigned ? 'Sin órdenes asignadas' : 'No hay órdenes de trabajo'}
+            </Text>
             <Text style={styles.emptyText}>
               {searchQuery
                 ? 'No se encontraron órdenes con ese criterio'
-                : 'Presiona el botón + para crear una nueva orden'}
+                : viewOnlyAssigned
+                  ? 'Tu técnico te notificará cuando tengas un nuevo trabajo asignado'
+                  : 'Presiona el botón + para crear una nueva orden'}
             </Text>
           </View>
         }
@@ -727,6 +769,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'flex-start',
   },
+  statusBadgeDisabled: {
+    opacity: 0.5,
+  },
   statusText: {
     fontSize: 12,
     fontWeight: '600' as const,
@@ -891,6 +936,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  permissionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#e0f2fe',
+    borderColor: '#bae6fd',
+    borderWidth: 1,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    borderRadius: 14,
+    padding: 12,
+  },
+  permissionText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1e3a8a',
+    lineHeight: 18,
   },
   modalContent: {
     backgroundColor: '#fff',

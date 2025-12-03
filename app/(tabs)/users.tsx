@@ -36,8 +36,10 @@ type UserFormData = {
 };
 
 export default function UsersScreen() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, permissions } = useAuth();
   const { users, addUser, updateUser, deleteUser } = useUsers();
+  const canManageUsers = permissions.canManageUsers;
+  const availableRoles: UserRole[] = isAdmin ? ['admin', 'technician', 'mechanic'] : ['technician', 'mechanic'];
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
@@ -50,10 +52,26 @@ export default function UsersScreen() {
     role: 'mechanic',
   });
 
+  if (!canManageUsers) {
+    return (
+      <View style={styles.restrictedContainer}>
+        <Shield size={48} color="#1d4ed8" />
+        <Text style={styles.restrictedTitle}>Acceso restringido</Text>
+        <Text style={styles.restrictedText}>
+          Solicita permisos al administrador para gestionar usuarios.
+        </Text>
+      </View>
+    );
+  }
+
   const selectedCountry = getCountryByCode(formData.countryCode);
 
   const handleOpenModal = (user?: User) => {
     if (user) {
+      if (user.role === 'admin' && !isAdmin) {
+        Alert.alert('Permiso denegado', 'Solo el administrador maestro puede editar este usuario');
+        return;
+      }
       setEditingUser(user);
       setFormData({
         name: user.name,
@@ -114,6 +132,11 @@ export default function UsersScreen() {
   const handleDelete = (user: User) => {
     if (user.role === 'admin') {
       Alert.alert('Error', 'No se puede eliminar al administrador');
+      return;
+    }
+
+    if (!isAdmin && user.role === 'technician') {
+      Alert.alert('Permiso denegado', 'Solo el administrador maestro puede eliminar técnicos');
       return;
     }
 
@@ -185,20 +208,6 @@ export default function UsersScreen() {
         );
       })
     : users;
-
-  if (!isAdmin) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.noAccessContainer}>
-          <Shield size={48} color="#dc2626" />
-          <Text style={styles.noAccessTitle}>Acceso Restringido</Text>
-          <Text style={styles.noAccessText}>
-            Solo los administradores pueden gestionar usuarios
-          </Text>
-        </View>
-      </View>
-    );
-  }
 
   const renderUser = ({ item }: { item: User }) => {
     const country = getCountryByCode(item.countryCode);
@@ -283,6 +292,15 @@ export default function UsersScreen() {
         >
           <Plus size={24} color="#fff" />
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.helperCard}>
+        <Text style={styles.helperTitle}>{isAdmin ? 'Rol Administrador' : 'Rol Técnico'}</Text>
+        <Text style={styles.helperDescription}>
+          {isAdmin
+            ? 'Crea nuevas mecánicas y define los roles que colaborarán en la plataforma.'
+            : 'Gestiona el equipo de tu mecánica. Solo el administrador maestro puede crear nuevos administradores.'}
+        </Text>
       </View>
 
       <FlatList
@@ -383,7 +401,7 @@ export default function UsersScreen() {
 
               <Text style={styles.label}>Rol *</Text>
               <View style={styles.roleSelector}>
-                {(['mechanic', 'technician', 'admin'] as UserRole[]).map((role) => (
+                {availableRoles.map((role) => (
                   <TouchableOpacity
                     key={role}
                     style={[
@@ -475,6 +493,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
+  restrictedContainer: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    padding: 24,
+  },
+  restrictedTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: '#0f172a',
+  },
+  restrictedText: {
+    fontSize: 16,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
   header: {
     flexDirection: 'row',
     padding: 16,
@@ -526,6 +563,26 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
+  },
+  helperCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#e0f2fe',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    gap: 6,
+  },
+  helperTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#0f172a',
+  },
+  helperDescription: {
+    fontSize: 13,
+    color: '#1e3a8a',
+    lineHeight: 18,
   },
   emptyContainer: {
     alignItems: 'center',
