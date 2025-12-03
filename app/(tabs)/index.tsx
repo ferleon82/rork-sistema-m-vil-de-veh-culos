@@ -63,6 +63,10 @@ export default function DashboardScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.welcomeCard}>
+        <View style={styles.brandHeader}>
+          <Text style={styles.brandBadge}>Drivvo</Text>
+          <Text style={styles.brandSubtitle}>Ecosistema inteligente de talleres</Text>
+        </View>
         <Text style={styles.welcomeText}>Hola, {user?.name}</Text>
         <Text style={styles.roleText}>
           {user?.role === 'admin' ? 'Administrador' : 'Técnico'}
@@ -185,13 +189,34 @@ const styles = StyleSheet.create({
   welcomeCard: {
     backgroundColor: '#fff',
     padding: 20,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+  },
+  brandHeader: {
+    marginBottom: 12,
+  },
+  brandBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#eef2ff',
+    color: '#4338ca',
+    fontSize: 14,
+    fontWeight: '700' as const,
+    marginBottom: 6,
+  },
+  brandSubtitle: {
+    fontSize: 14,
+    color: '#4c1d95',
+    fontWeight: '500' as const,
   },
   welcomeText: {
     fontSize: 24,

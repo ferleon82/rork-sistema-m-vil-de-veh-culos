@@ -86,6 +86,13 @@ export default function VehiclesScreen() {
     setClientSelectorVisible(false);
   };
 
+  const handlePlateChange = (value: string) => {
+    const formatted = value
+      .toUpperCase()
+      .replace(/[^A-Z0-9\-_.\s]/g, '');
+    setFormData((prev) => ({ ...prev, plate: formatted }));
+  };
+
   const filteredVehicles = searchQuery
     ? vehicles.filter(
         (v) =>
@@ -198,10 +205,11 @@ export default function VehiclesScreen() {
               <TextInput
                 style={styles.input}
                 value={formData.plate}
-                onChangeText={(text) => setFormData({ ...formData, plate: text })}
+                onChangeText={handlePlateChange}
                 placeholder="ABC-1234"
                 placeholderTextColor="#9ca3af"
                 autoCapitalize="characters"
+                testID="vehicle-plate-input"
               />
 
               <Text style={styles.label}>Marca *</Text>
