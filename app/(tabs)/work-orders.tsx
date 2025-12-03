@@ -10,7 +10,7 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search } from 'lucide-react-native';
+import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search, Edit3 } from 'lucide-react-native';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useUsers } from '@/contexts/UsersContext';
@@ -18,8 +18,26 @@ import { useAuth } from '@/contexts/AuthContext';
 import { sendStatusUpdate, sendBudget } from '@/utils/whatsapp';
 import { WorkOrderStatus, WorkOrderItem } from '@/types';
 
+type WorkOrderFormState = {
+  vehicleId: string;
+  description: string;
+  diagnosis: string;
+  priority: 'low' | 'medium' | 'high';
+  assignedTo: string;
+  items: WorkOrderItem[];
+};
+
+const createInitialFormState = (): WorkOrderFormState => ({
+  vehicleId: '',
+  description: '',
+  diagnosis: '',
+  priority: 'medium',
+  assignedTo: '',
+  items: [],
+});
+
 export default function WorkOrdersScreen() {
-  const { workOrders, updateWorkOrderStatus, addWorkOrder } = useWorkOrders();
+  const { workOrders, updateWorkOrderStatus, addWorkOrder, updateWorkOrder } = useWorkOrders();
   const { vehicles, getVehicleById } = useVehicles();
   const { getMechanics, getUserById } = useUsers();
   const { user } = useAuth();
@@ -28,21 +46,8 @@ export default function WorkOrdersScreen() {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showVehicleSelector, setShowVehicleSelector] = useState<boolean>(false);
   const [showMechanicSelector, setShowMechanicSelector] = useState<boolean>(false);
-  const [formData, setFormData] = useState<{
-    vehicleId: string;
-    description: string;
-    diagnosis: string;
-    priority: 'low' | 'medium' | 'high';
-    assignedTo: string;
-    items: WorkOrderItem[];
-  }>({
-    vehicleId: '',
-    description: '',
-    diagnosis: '',
-    priority: 'medium',
-    assignedTo: '',
-    items: [],
-  });
+  const [formData, setFormData] = useState<WorkOrderFormState>(createInitialFormState);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   
   const mechanics = getMechanics();
 
@@ -162,14 +167,29 @@ export default function WorkOrdersScreen() {
   };
 
   const handleOpenModal = () => {
+    setFormData(createInitialFormState());
+    setEditingOrderId(null);
+    setModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    setEditingOrderId(null);
+    setFormData(createInitialFormState());
+    setShowVehicleSelector(false);
+    setShowMechanicSelector(false);
+  };
+
+  const handleEditOrder = (order: typeof workOrders[0]) => {
     setFormData({
-      vehicleId: '',
-      description: '',
-      diagnosis: '',
-      priority: 'medium',
-      assignedTo: '',
-      items: [],
+      vehicleId: order.vehicleId,
+      description: order.description,
+      diagnosis: order.diagnosis ?? '',
+      priority: order.priority,
+      assignedTo: order.assignedTo ?? '',
+      items: order.items,
     });
+    setEditingOrderId(order.id);
     setModalVisible(true);
   };
 
@@ -184,27 +204,45 @@ export default function WorkOrdersScreen() {
       return;
     }
 
+    const trimmedDiagnosis = formData.diagnosis.trim();
+    const normalizedDiagnosis = trimmedDiagnosis.length > 0 ? trimmedDiagnosis : undefined;
+
     try {
-      await addWorkOrder({
-        vehicleId: formData.vehicleId,
-        description: formData.description,
-        diagnosis: formData.diagnosis || undefined,
-        priority: formData.priority,
-        status: 'pending',
-        items: formData.items,
-        createdBy: user?.id || '',
-        assignedTo: formData.assignedTo,
-      });
-      Alert.alert('Éxito', 'Orden de trabajo creada correctamente');
-      setModalVisible(false);
+      if (editingOrderId) {
+        const totalCost = formData.items.reduce((sum, item) => sum + item.total, 0);
+        await updateWorkOrder(editingOrderId, {
+          vehicleId: formData.vehicleId,
+          description: formData.description,
+          diagnosis: normalizedDiagnosis,
+          priority: formData.priority,
+          assignedTo: formData.assignedTo,
+          items: formData.items,
+          totalCost,
+        });
+        Alert.alert('Éxito', 'Orden de trabajo actualizada correctamente');
+      } else {
+        await addWorkOrder({
+          vehicleId: formData.vehicleId,
+          description: formData.description,
+          diagnosis: normalizedDiagnosis,
+          priority: formData.priority,
+          status: 'pending',
+          items: formData.items,
+          createdBy: user?.id || '',
+          assignedTo: formData.assignedTo,
+        });
+        Alert.alert('Éxito', 'Orden de trabajo creada correctamente');
+      }
+      handleCloseModal();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo crear la orden de trabajo');
+      Alert.alert('Error', editingOrderId ? 'No se pudo actualizar la orden de trabajo' : 'No se pudo crear la orden de trabajo');
       console.error(error);
     }
   };
 
   const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
   const selectedMechanic = mechanics.find(m => m.id === formData.assignedTo);
+  const isEditing = editingOrderId !== null;
 
   const renderWorkOrder = ({ item: order }: { item: typeof workOrders[0] }) => {
     const vehicle = getVehicleById(order.vehicleId);
@@ -231,6 +269,15 @@ export default function WorkOrdersScreen() {
               </View>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => handleEditOrder(order)}
+            testID={`edit-work-order-${order.id}`}
+          >
+            <Edit3 size={16} color="#2563eb" />
+            <Text style={styles.editButtonText}>Editar</Text>
+          </TouchableOpacity>
         </View>
 
         {vehicle && (
@@ -340,7 +387,11 @@ export default function WorkOrdersScreen() {
             onChangeText={setSearchQuery}
           />
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={handleOpenModal}>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={handleOpenModal}
+          testID="open-work-order-modal-button"
+        >
           <Plus size={24} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -367,12 +418,14 @@ export default function WorkOrdersScreen() {
         visible={modalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={handleCloseModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalTitle}>Nueva Orden de Trabajo</Text>
+              <Text style={styles.modalTitle}>
+                {isEditing ? 'Editar Orden de Trabajo' : 'Nueva Orden de Trabajo'}
+              </Text>
 
               <Text style={styles.inputLabel}>Vehículo *</Text>
               <TouchableOpacity
@@ -454,7 +507,8 @@ export default function WorkOrdersScreen() {
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.cancelButton]}
-                  onPress={() => setModalVisible(false)}
+                  onPress={handleCloseModal}
+                  testID="cancel-work-order-modal-button"
                 >
                   <Text style={styles.cancelButtonText}>Cancelar</Text>
                 </TouchableOpacity>
@@ -462,8 +516,9 @@ export default function WorkOrdersScreen() {
                 <TouchableOpacity
                   style={[styles.modalButton, styles.submitButton]}
                   onPress={handleSubmitWorkOrder}
+                  testID={isEditing ? 'save-work-order-button' : 'create-work-order-button'}
                 >
-                  <Text style={styles.submitButtonText}>Crear</Text>
+                  <Text style={styles.submitButtonText}>{isEditing ? 'Guardar' : 'Crear'}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -637,10 +692,29 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 12,
   },
   headerLeft: {
+    flex: 1,
     gap: 8,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#eef2ff',
+  },
+  editButtonText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#2563eb',
   },
   orderCode: {
     fontSize: 18,

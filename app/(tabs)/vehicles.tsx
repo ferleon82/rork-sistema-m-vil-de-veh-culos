@@ -34,7 +34,7 @@ export default function VehiclesScreen() {
       return;
     }
 
-    if (!formData.vin || !formData.plate || !formData.brand || !formData.model || !formData.year || !formData.currentKm) {
+    if (!formData.plate || !formData.brand || !formData.model || !formData.year || !formData.currentKm) {
       Alert.alert('Error', 'Por favor completa todos los campos requeridos');
       return;
     }
@@ -113,7 +113,7 @@ export default function VehiclesScreen() {
       <View style={styles.cardBody}>
         <View style={styles.detailRow}>
           <Text style={styles.label}>VIN:</Text>
-          <Text style={styles.value}>{item.vin}</Text>
+          <Text style={styles.value}>{item.vin ? item.vin : 'No registrado'}</Text>
         </View>
 
         <View style={styles.detailRow}>
@@ -194,16 +194,6 @@ export default function VehiclesScreen() {
             <ScrollView>
               <Text style={styles.modalTitle}>Registrar Vehículo de Entrada</Text>
 
-              <Text style={styles.label}>VIN *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.vin}
-                onChangeText={(text) => setFormData({ ...formData, vin: text })}
-                placeholder="Número de identificación vehicular"
-                placeholderTextColor="#9ca3af"
-                autoCapitalize="characters"
-              />
-
               <Text style={styles.label}>Placa *</Text>
               <TextInput
                 style={styles.input}
@@ -257,6 +247,16 @@ export default function VehiclesScreen() {
                   />
                 </View>
               </View>
+
+              <Text style={styles.label}>VIN (opcional)</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.vin}
+                onChangeText={(text) => setFormData({ ...formData, vin: text })}
+                placeholder="Número de identificación vehicular"
+                placeholderTextColor="#9ca3af"
+                autoCapitalize="characters"
+              />
 
               <View style={styles.sectionDivider} />
               <Text style={styles.sectionTitle}>Cliente</Text>
