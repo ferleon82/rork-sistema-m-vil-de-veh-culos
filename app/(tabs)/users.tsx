@@ -10,28 +10,47 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import { Plus, UserPlus, Trash2, Edit, Shield, Wrench, User as UserIcon, Search } from 'lucide-react-native';
+import {
+  Plus,
+  UserPlus,
+  Trash2,
+  Edit,
+  Shield,
+  Wrench,
+  User as UserIcon,
+  Search,
+  Globe,
+  X,
+} from 'lucide-react-native';
+import { LATIN_AMERICAN_COUNTRIES, getCountryByCode } from '@/constants/countries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUsers } from '@/contexts/UsersContext';
 import { User, UserRole } from '@/types';
+
+type UserFormData = {
+  name: string;
+  email: string;
+  phone: string;
+  countryCode: string;
+  role: UserRole;
+};
 
 export default function UsersScreen() {
   const { isAdmin } = useAuth();
   const { users, addUser, updateUser, deleteUser } = useUsers();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formData, setFormData] = useState<{
-    name: string;
-    email: string;
-    phone: string;
-    role: UserRole;
-  }>({
+  const [formData, setFormData] = useState<UserFormData>({
     name: '',
     email: '',
     phone: '',
+    countryCode: 'SV',
     role: 'mechanic',
   });
+
+  const selectedCountry = getCountryByCode(formData.countryCode);
 
   const handleOpenModal = (user?: User) => {
     if (user) {
@@ -40,6 +59,7 @@ export default function UsersScreen() {
         name: user.name,
         email: user.email,
         phone: user.phone || '',
+        countryCode: user.countryCode,
         role: user.role,
       });
     } else {
@@ -48,6 +68,7 @@ export default function UsersScreen() {
         name: '',
         email: '',
         phone: '',
+        countryCode: 'SV',
         role: 'mechanic',
       });
     }
@@ -59,18 +80,28 @@ export default function UsersScreen() {
     setEditingUser(null);
   };
 
+  const sanitizePhoneDigits = (value: string) => value.replace(/[^0-9]/g, '');
+
   const handleSubmit = async () => {
-    if (!formData.name || !formData.email) {
+    if (!formData.name.trim() || !formData.email.trim()) {
       Alert.alert('Error', 'Por favor completa todos los campos requeridos');
       return;
     }
 
     try {
+      const payload: Omit<User, 'id'> = {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        role: formData.role,
+        countryCode: formData.countryCode,
+        phone: formData.phone ? formData.phone : undefined,
+      };
+
       if (editingUser) {
-        await updateUser(editingUser.id, formData);
+        await updateUser(editingUser.id, payload);
         Alert.alert('Éxito', 'Usuario actualizado correctamente');
       } else {
-        await addUser(formData);
+        await addUser(payload);
         Alert.alert('Éxito', 'Usuario creado correctamente');
       }
       handleCloseModal();
@@ -143,13 +174,16 @@ export default function UsersScreen() {
   };
 
   const filteredUsers = searchQuery
-    ? users.filter(
-        (u) =>
+    ? users.filter((u) => {
+        const country = getCountryByCode(u.countryCode);
+        return (
           u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (u.phone && u.phone.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          getRoleLabel(u.role).toLowerCase().includes(searchQuery.toLowerCase())
-      )
+          getRoleLabel(u.role).toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (country && country.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        );
+      })
     : users;
 
   if (!isAdmin) {
@@ -166,42 +200,68 @@ export default function UsersScreen() {
     );
   }
 
-  const renderUser = ({ item }: { item: User }) => (
-    <View style={styles.userCard}>
-      <View style={styles.userIcon}>
-        {getRoleIcon(item.role)}
-      </View>
-      
-      <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.name}</Text>
-        <Text style={styles.userEmail}>{item.email}</Text>
-        {item.phone && <Text style={styles.userPhone}>{item.phone}</Text>}
-        <View style={[styles.roleBadge, { backgroundColor: `${getRoleColor(item.role)}15` }]}>
-          <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
-            {getRoleLabel(item.role)}
-          </Text>
-        </View>
-      </View>
+  const renderUser = ({ item }: { item: User }) => {
+    const country = getCountryByCode(item.countryCode);
 
-      <View style={styles.userActions}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleOpenModal(item)}
-        >
-          <Edit size={18} color="#2563eb" />
-        </TouchableOpacity>
-        
-        {item.role !== 'admin' && (
+    return (
+      <View style={styles.userCard}>
+        <View style={styles.userIcon}>{getRoleIcon(item.role)}</View>
+
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.name}</Text>
+          <Text style={styles.userEmail}>{item.email}</Text>
+          {item.phone && <Text style={styles.userPhone}>{item.phone}</Text>}
+          {country && (
+            <View style={styles.userMeta}>
+              <Globe size={14} color="#6b7280" />
+              <Text style={styles.userCountry}>{country.name}</Text>
+            </View>
+          )}
+          <View style={[styles.roleBadge, { backgroundColor: `${getRoleColor(item.role)}15` }]}>
+            <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
+              {getRoleLabel(item.role)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.userActions}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => handleDelete(item)}
+            onPress={() => handleOpenModal(item)}
           >
-            <Trash2 size={18} color="#dc2626" />
+            <Edit size={18} color="#2563eb" />
           </TouchableOpacity>
-        )}
+
+          {item.role !== 'admin' && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => handleDelete(item)}
+            >
+              <Trash2 size={18} color="#dc2626" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
+
+  const phoneDigits = selectedCountry
+    ? formData.phone.replace(selectedCountry.phonePrefix, '').trim()
+    : formData.phone;
+
+  const handleSelectCountry = (code: string) => {
+    const nextCountry = getCountryByCode(code);
+    const currentDigits = selectedCountry
+      ? sanitizePhoneDigits(formData.phone.replace(selectedCountry.phonePrefix, ''))
+      : sanitizePhoneDigits(formData.phone);
+
+    setFormData((prev) => ({
+      ...prev,
+      countryCode: code,
+      phone: nextCountry ? `${nextCountry.phonePrefix}${currentDigits}` : currentDigits,
+    }));
+    setShowCountryPicker(false);
+  };
 
   return (
     <View style={styles.container}>
@@ -213,9 +273,14 @@ export default function UsersScreen() {
             placeholder="Buscar usuarios..."
             value={searchQuery}
             onChangeText={setSearchQuery}
+            testID="users-search-input"
           />
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => handleOpenModal()}>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => handleOpenModal()}
+          testID="users-add-button"
+        >
           <Plus size={24} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -250,16 +315,21 @@ export default function UsersScreen() {
                 {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
               </Text>
 
-              <Text style={styles.label}>Nombre *</Text>
+              <Text style={styles.label}>
+                Nombre <Text style={styles.required}>*</Text>
+              </Text>
               <TextInput
                 style={styles.input}
                 value={formData.name}
                 onChangeText={(text) => setFormData({ ...formData, name: text })}
                 placeholder="Nombre completo"
                 placeholderTextColor="#9ca3af"
+                testID="user-name-input"
               />
 
-              <Text style={styles.label}>Email *</Text>
+              <Text style={styles.label}>
+                Email <Text style={styles.required}>*</Text>
+              </Text>
               <TextInput
                 style={styles.input}
                 value={formData.email}
@@ -268,17 +338,48 @@ export default function UsersScreen() {
                 placeholderTextColor="#9ca3af"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                testID="user-email-input"
               />
 
+              <Text style={styles.label}>
+                País <Text style={styles.required}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={styles.countrySelector}
+                onPress={() => setShowCountryPicker(true)}
+                testID="user-country-selector"
+              >
+                <Globe size={20} color="#6b7280" />
+                <Text style={styles.countrySelectorText}>
+                  {selectedCountry?.name} ({selectedCountry?.phonePrefix})
+                </Text>
+              </TouchableOpacity>
+
               <Text style={styles.label}>Teléfono</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.phone}
-                onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                placeholder="+503 1234-5678"
-                placeholderTextColor="#9ca3af"
-                keyboardType="phone-pad"
-              />
+              <View style={styles.phoneInputContainer}>
+                <View style={styles.phonePrefix}>
+                  <Text style={styles.phonePrefixText}>
+                    {selectedCountry?.phonePrefix ?? '+00'}
+                  </Text>
+                </View>
+                <TextInput
+                  style={[styles.input, styles.phoneInput]}
+                  placeholder="1234 5678"
+                  value={phoneDigits}
+                  onChangeText={(text) => {
+                    const cleanPhone = sanitizePhoneDigits(text);
+                    setFormData({
+                      ...formData,
+                      phone: selectedCountry
+                        ? `${selectedCountry.phonePrefix}${cleanPhone}`
+                        : cleanPhone,
+                    });
+                  }}
+                  keyboardType="phone-pad"
+                  placeholderTextColor="#9ca3af"
+                  testID="user-phone-input"
+                />
+              </View>
 
               <Text style={styles.label}>Rol *</Text>
               <View style={styles.roleSelector}>
@@ -291,6 +392,7 @@ export default function UsersScreen() {
                       formData.role === role && { borderColor: getRoleColor(role) },
                     ]}
                     onPress={() => setFormData({ ...formData, role })}
+                    testID={`user-role-${role}`}
                   >
                     {getRoleIcon(role)}
                     <Text
@@ -309,6 +411,7 @@ export default function UsersScreen() {
                 <TouchableOpacity
                   style={[styles.modalButton, styles.cancelButton]}
                   onPress={handleCloseModal}
+                  testID="user-form-cancel"
                 >
                   <Text style={styles.cancelButtonText}>Cancelar</Text>
                 </TouchableOpacity>
@@ -316,6 +419,7 @@ export default function UsersScreen() {
                 <TouchableOpacity
                   style={[styles.modalButton, styles.submitButton]}
                   onPress={handleSubmit}
+                  testID="user-form-submit"
                 >
                   <Text style={styles.submitButtonText}>
                     {editingUser ? 'Actualizar' : 'Crear'}
@@ -323,6 +427,42 @@ export default function UsersScreen() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showCountryPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCountryPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.countryModalContent}>
+            <View style={styles.countryModalHeader}>
+              <Text style={styles.countryModalTitle}>Seleccionar País</Text>
+              <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={LATIN_AMERICAN_COUNTRIES}
+              keyExtractor={(item) => item.code}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.countryItem,
+                    formData.countryCode === item.code && styles.countryItemSelected,
+                  ]}
+                  onPress={() => handleSelectCountry(item.code)}
+                >
+                  <Text style={styles.countryItemName}>{item.name}</Text>
+                  <Text style={styles.countryItemPrefix}>{item.phonePrefix}</Text>
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={styles.countryList}
+              testID="user-country-list"
+            />
           </View>
         </View>
       </Modal>
@@ -396,6 +536,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#9ca3af',
+    textAlign: 'center',
   },
   userCard: {
     flexDirection: 'row',
@@ -436,7 +577,17 @@ const styles = StyleSheet.create({
   userPhone: {
     fontSize: 13,
     color: '#9ca3af',
-    marginBottom: 6,
+    marginBottom: 4,
+  },
+  userMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  userCountry: {
+    fontSize: 13,
+    color: '#6b7280',
   },
   roleBadge: {
     alignSelf: 'flex-start',
@@ -485,6 +636,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 12,
   },
+  required: {
+    color: '#dc2626',
+  },
   input: {
     backgroundColor: '#f9fafb',
     borderWidth: 1,
@@ -493,6 +647,45 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#1f2937',
+  },
+  countrySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+  },
+  countrySelectorText: {
+    fontSize: 16,
+    color: '#111827',
+    flex: 1,
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  phonePrefix: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  phonePrefixText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#374151',
+  },
+  phoneInput: {
+    flex: 1,
   },
   roleSelector: {
     flexDirection: 'column',
@@ -544,5 +737,48 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#fff',
+  },
+  countryModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+  },
+  countryModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  countryModalTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: '#111827',
+  },
+  countryList: {
+    paddingBottom: 20,
+  },
+  countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  countryItemSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  countryItemName: {
+    fontSize: 16,
+    fontWeight: '500' as const,
+    color: '#111827',
+  },
+  countryItemPrefix: {
+    fontSize: 16,
+    color: '#6b7280',
   },
 });

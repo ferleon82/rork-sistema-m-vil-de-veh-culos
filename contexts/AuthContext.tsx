@@ -13,14 +13,16 @@ const INITIAL_USERS: User[] = [
     email: 'admin@taller.com',
     name: 'Administrador',
     role: 'admin',
-    phone: '+1234567890',
+    countryCode: 'SV',
+    phone: '+50312345678',
   },
   {
     id: '2',
     email: 'tecnico@taller.com',
     name: 'Técnico Juan',
     role: 'technician',
-    phone: '+1234567891',
+    countryCode: 'SV',
+    phone: '+50387654321',
   },
 ];
 

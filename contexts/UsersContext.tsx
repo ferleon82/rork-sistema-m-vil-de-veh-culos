@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { User, UserRole } from '@/types';
 
 const STORAGE_KEY = '@users';
+const DEFAULT_COUNTRY_CODE = 'SV';
 
 const INITIAL_USERS: User[] = [
   {
@@ -11,14 +12,16 @@ const INITIAL_USERS: User[] = [
     email: 'admin@taller.com',
     name: 'Administrador',
     role: 'admin',
-    phone: '+1234567890',
+    countryCode: 'SV',
+    phone: '+50312345678',
   },
   {
     id: '2',
     email: 'tecnico@taller.com',
     name: 'Técnico Juan',
     role: 'technician',
-    phone: '+1234567891',
+    countryCode: 'SV',
+    phone: '+50387654321',
   },
 ];
 
@@ -33,7 +36,13 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setUsers(JSON.parse(stored));
+        const parsedUsers: User[] = JSON.parse(stored);
+        setUsers(
+          parsedUsers.map((user) => ({
+            ...user,
+            countryCode: user.countryCode || DEFAULT_COUNTRY_CODE,
+          }))
+        );
       } else {
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_USERS));
       }
