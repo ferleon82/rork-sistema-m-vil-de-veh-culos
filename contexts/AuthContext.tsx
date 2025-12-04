@@ -72,13 +72,13 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
   },
   technician: {
     canManageWorkshops: false,
-    canManageUsers: false,
+    canManageUsers: true,
     canManageVehicles: true,
     canManageClients: true,
     canManageWorkOrders: true,
     canAssignWorkOrders: true,
     viewOnlyAssignedWorkOrders: false,
-    accessibleTabs: ['index', 'vehicles', 'work-orders', 'clients', 'settings'],
+    accessibleTabs: ['index', 'vehicles', 'work-orders', 'clients', 'users', 'settings'],
   },
   mechanic: {
     canManageWorkshops: false,
