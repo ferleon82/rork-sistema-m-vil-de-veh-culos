@@ -1,11 +1,77 @@
 import { Redirect, Tabs } from "expo-router";
-import { LayoutDashboard, Car, ClipboardList, Users, UserCheck, Settings, Factory } from "lucide-react-native";
-import React from "react";
+import {
+  LayoutDashboard,
+  Car,
+  ClipboardList,
+  Users,
+  UserCheck,
+  Settings,
+  Factory,
+} from "lucide-react-native";
+import React, { useMemo } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
+import type { RolePermissions } from "@/contexts/AuthContext";
+
+type TabConfig = {
+  name: string;
+  title: string;
+  icon: React.ComponentType<{ color?: string; size?: number }>;
+  isVisible: (permissions: RolePermissions) => boolean;
+};
+
+const TAB_CONFIG: readonly TabConfig[] = [
+  {
+    name: "index",
+    title: "Dashboard",
+    icon: LayoutDashboard,
+    isVisible: (_permissions: RolePermissions) => true,
+  },
+  {
+    name: "vehicles",
+    title: "Vehículos",
+    icon: Car,
+    isVisible: (permissions: RolePermissions) => permissions.canManageVehicles,
+  },
+  {
+    name: "work-orders",
+    title: "Órdenes",
+    icon: ClipboardList,
+    isVisible: (permissions: RolePermissions) =>
+      permissions.canManageWorkOrders || permissions.viewOnlyAssignedWorkOrders,
+  },
+  {
+    name: "workshops",
+    title: "Mecánicas",
+    icon: Factory,
+    isVisible: (permissions: RolePermissions) => permissions.canManageWorkshops,
+  },
+  {
+    name: "clients",
+    title: "Clientes",
+    icon: UserCheck,
+    isVisible: (permissions: RolePermissions) => permissions.canManageClients,
+  },
+  {
+    name: "users",
+    title: "Usuarios",
+    icon: Users,
+    isVisible: (permissions: RolePermissions) => permissions.canManageUsers,
+  },
+  {
+    name: "settings",
+    title: "Ajustes",
+    icon: Settings,
+    isVisible: (_permissions: RolePermissions) => true,
+  },
+] as const;
 
 export default function TabLayout() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, permissions } = useAuth();
+
+  const visibleTabs = useMemo(() => {
+    return TAB_CONFIG.filter((tab) => tab.isVisible(permissions));
+  }, [permissions]);
 
   if (isLoading) {
     return (
@@ -47,55 +113,21 @@ export default function TabLayout() {
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Dashboard",
-          tabBarIcon: ({ color, size }) => <LayoutDashboard size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="vehicles"
-        options={{
-          title: "Vehículos",
-          tabBarIcon: ({ color, size }) => <Car size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="work-orders"
-        options={{
-          title: "Órdenes",
-          tabBarIcon: ({ color, size }) => <ClipboardList size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="workshops"
-        options={{
-          title: "Mecánicas",
-          tabBarIcon: ({ color, size }) => <Factory size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="clients"
-        options={{
-          title: "Clientes",
-          tabBarIcon: ({ color, size }) => <UserCheck size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="users"
-        options={{
-          title: "Usuarios",
-          tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Ajustes",
-          tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
-        }}
-      />
+      {visibleTabs.map((tab) => {
+        const IconComponent = tab.icon;
+        return (
+          <Tabs.Screen
+            key={tab.name}
+            name={tab.name}
+            options={{
+              title: tab.title,
+              tabBarIcon: ({ color, size }) => (
+                <IconComponent size={size} color={color} />
+              ),
+            }}
+          />
+        );
+      })}
     </Tabs>
   );
 }
