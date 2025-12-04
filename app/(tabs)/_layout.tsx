@@ -1,13 +1,30 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { LayoutDashboard, Car, ClipboardList, Users, UserCheck, Settings, Factory } from "lucide-react-native";
 import React from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function TabLayout() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: "#2563eb",
         tabBarInactiveTintColor: "#9ca3af",
+        tabBarHideOnKeyboard: true,
         headerShown: true,
         headerStyle: {
           backgroundColor: "#2563eb",
@@ -82,3 +99,12 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0f172a",
+  },
+});

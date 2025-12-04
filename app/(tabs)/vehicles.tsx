@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import {
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useClients } from '@/contexts/ClientsContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { VEHICLE_BRANDS } from '@/constants/vehicleBrands';
 import { Client, Vehicle } from '@/types';
 
 interface VehicleFormState {
@@ -62,11 +63,15 @@ export default function VehiclesScreen() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState<VehicleFormState>(createInitialFormState());
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [brandSelectorVisible, setBrandSelectorVisible] = useState<boolean>(false);
+  const [brandSearchQuery, setBrandSearchQuery] = useState<string>('');
 
   const resetForm = () => {
     setFormData(createInitialFormState());
     setSelectedClient(null);
     setEditingVehicle(null);
+    setBrandSearchQuery('');
+    setBrandSelectorVisible(false);
   };
 
   const handleCloseModal = () => {
@@ -246,15 +251,55 @@ export default function VehiclesScreen() {
     setFormData((prev) => ({ ...prev, photoUrl: null }));
   };
 
-  const filteredVehicles = searchQuery
-    ? vehicles.filter(
-        (v) =>
-          v.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.ownerName.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : vehicles;
+  const filteredVehicles = useMemo(() => {
+    if (!searchQuery) {
+      return vehicles;
+    }
+    const normalized = searchQuery.toLowerCase();
+    return vehicles.filter(
+      (v) =>
+        v.brand.toLowerCase().includes(normalized) ||
+        v.model.toLowerCase().includes(normalized) ||
+        v.plate.toLowerCase().includes(normalized) ||
+        v.ownerName.toLowerCase().includes(normalized),
+    );
+  }, [searchQuery, vehicles]);
+
+  const normalizedBrandQuery = brandSearchQuery.trim().toLowerCase();
+
+  const brandResults = useMemo(() => {
+    if (!normalizedBrandQuery) {
+      return VEHICLE_BRANDS;
+    }
+    return VEHICLE_BRANDS.filter((brand) => brand.toLowerCase().includes(normalizedBrandQuery));
+  }, [normalizedBrandQuery]);
+
+  const showCustomBrandOption =
+    normalizedBrandQuery.length > 0 &&
+    !VEHICLE_BRANDS.some((brand) => brand.toLowerCase() === normalizedBrandQuery);
+
+  const openBrandSelector = () => {
+    setBrandSearchQuery('');
+    setBrandSelectorVisible(true);
+  };
+
+  const handleCloseBrandSelector = () => {
+    setBrandSelectorVisible(false);
+    setBrandSearchQuery('');
+  };
+
+  const handleSelectBrand = (brand: string) => {
+    setFormData((prev) => ({ ...prev, brand }));
+    handleCloseBrandSelector();
+  };
+
+  const handleUseCustomBrand = () => {
+    if (!normalizedBrandQuery) {
+      return;
+    }
+    setFormData((prev) => ({ ...prev, brand: brandSearchQuery.trim() }));
+    handleCloseBrandSelector();
+  };
 
   if (!canManageVehicles) {
     return (
@@ -405,13 +450,23 @@ export default function VehiclesScreen() {
               />
 
               <Text style={styles.label}>Marca *</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.brand}
-                onChangeText={(text) => setFormData({ ...formData, brand: text })}
-                placeholder="Toyota, Honda, etc."
-                placeholderTextColor="#9ca3af"
-              />
+              <TouchableOpacity
+                style={styles.selectorInput}
+                onPress={openBrandSelector}
+                testID="vehicle-brand-selector"
+              >
+                <View style={styles.selectorValueWrapper}>
+                  <Text style={formData.brand ? styles.selectorValue : styles.selectorPlaceholder}>
+                    {formData.brand ? formData.brand : 'Buscar marca comercial...'}
+                  </Text>
+                </View>
+                <View style={styles.selectorIconBubble}>
+                  <Search size={18} color="#0f172a" />
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.selectorHelper}>
+                Escribe algunas letras para encontrar marcas comerciales populares.
+              </Text>
 
               <Text style={styles.label}>Modelo *</Text>
               <TextInput
@@ -551,6 +606,66 @@ export default function VehiclesScreen() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={brandSelectorVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCloseBrandSelector}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Buscar marca</Text>
+            <View style={styles.brandSearchBox}>
+              <Search size={18} color="#6b7280" />
+              <TextInput
+                style={styles.brandSearchInput}
+                value={brandSearchQuery}
+                onChangeText={setBrandSearchQuery}
+                placeholder="Escribe Toyota, Kia, etc."
+                placeholderTextColor="#9ca3af"
+                autoFocus={true}
+                testID="vehicle-brand-search-input"
+              />
+            </View>
+
+            {brandResults.length === 0 && !showCustomBrandOption ? (
+              <View style={styles.brandEmptyState}>
+                <Text style={styles.brandEmptyText}>No encontramos coincidencias.</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.brandList}>
+                {brandResults.map((brand) => (
+                  <TouchableOpacity
+                    key={brand}
+                    style={styles.brandItem}
+                    onPress={() => handleSelectBrand(brand)}
+                    testID={`vehicle-brand-option-${brand.toLowerCase().replace(/\s+/g, '-')}`}
+                  >
+                    <Text style={styles.brandItemText}>{brand}</Text>
+                  </TouchableOpacity>
+                ))}
+
+                {showCustomBrandOption && (
+                  <TouchableOpacity
+                    style={[styles.brandItem, styles.customBrandButton]}
+                    onPress={handleUseCustomBrand}
+                    testID="vehicle-brand-custom-option"
+                  >
+                    <Text style={styles.customBrandText}>
+                      Usar “{brandSearchQuery.trim()}”
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            )}
+
+            <TouchableOpacity style={styles.closeButton} onPress={handleCloseBrandSelector}>
+              <Text style={styles.closeButtonText}>Cerrar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -799,6 +914,90 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#1f2937',
+  },
+  selectorInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 4,
+  },
+  selectorValueWrapper: {
+    flex: 1,
+  },
+  selectorValue: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#111827',
+  },
+  selectorPlaceholder: {
+    fontSize: 16,
+    color: '#9ca3af',
+  },
+  selectorIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#e0f2fe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectorHelper: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  brandSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  brandSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+  },
+  brandEmptyState: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  brandEmptyText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  brandList: {
+    maxHeight: 360,
+    marginBottom: 16,
+  },
+  brandItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  brandItemText: {
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: '500' as const,
+  },
+  customBrandButton: {
+    backgroundColor: '#eef2ff',
+  },
+  customBrandText: {
+    fontSize: 15,
+    color: '#4338ca',
+    fontWeight: '600' as const,
   },
   row: {
     flexDirection: 'row',
