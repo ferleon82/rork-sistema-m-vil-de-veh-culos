@@ -183,19 +183,21 @@ export default function DashboardScreen() {
         )}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Vehículos Registrados</Text>
-        <View style={styles.vehiclesCard}>
-          <Text style={styles.vehiclesCount}>{vehicles.length}</Text>
-          <Text style={styles.vehiclesLabel}>vehículos en el sistema</Text>
-          <TouchableOpacity
-            style={styles.viewButton}
-            onPress={() => router.push('/vehicles' as any)}
-          >
-            <Text style={styles.viewButtonText}>Ver vehículos</Text>
-          </TouchableOpacity>
+      {permissions.canManageVehicles && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Vehículos Registrados</Text>
+          <View style={styles.vehiclesCard}>
+            <Text style={styles.vehiclesCount}>{vehicles.length}</Text>
+            <Text style={styles.vehiclesLabel}>vehículos en el sistema</Text>
+            <TouchableOpacity
+              style={styles.viewButton}
+              onPress={() => router.push('/vehicles' as any)}
+            >
+              <Text style={styles.viewButtonText}>Ver vehículos</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      )}
     </ScrollView>
   );
 }

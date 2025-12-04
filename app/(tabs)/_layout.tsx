@@ -11,13 +11,12 @@ import {
 import React, { useMemo } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
-import type { RolePermissions } from "@/contexts/AuthContext";
+import type { AppTabName } from "@/contexts/AuthContext";
 
 type TabConfig = {
-  name: string;
+  name: AppTabName;
   title: string;
   icon: React.ComponentType<{ color?: string; size?: number }>;
-  isVisible: (permissions: RolePermissions) => boolean;
 };
 
 const TAB_CONFIG: readonly TabConfig[] = [
@@ -25,44 +24,36 @@ const TAB_CONFIG: readonly TabConfig[] = [
     name: "index",
     title: "Dashboard",
     icon: LayoutDashboard,
-    isVisible: (_permissions: RolePermissions) => true,
   },
   {
     name: "vehicles",
     title: "Vehículos",
     icon: Car,
-    isVisible: (permissions: RolePermissions) => permissions.canManageVehicles,
   },
   {
     name: "work-orders",
     title: "Órdenes",
     icon: ClipboardList,
-    isVisible: (permissions: RolePermissions) =>
-      permissions.canManageWorkOrders || permissions.viewOnlyAssignedWorkOrders,
   },
   {
     name: "workshops",
     title: "Mecánicas",
     icon: Factory,
-    isVisible: (permissions: RolePermissions) => permissions.canManageWorkshops,
   },
   {
     name: "clients",
     title: "Clientes",
     icon: UserCheck,
-    isVisible: (permissions: RolePermissions) => permissions.canManageClients,
   },
   {
     name: "users",
     title: "Usuarios",
     icon: Users,
-    isVisible: (permissions: RolePermissions) => permissions.canManageUsers,
   },
   {
     name: "settings",
     title: "Ajustes",
     icon: Settings,
-    isVisible: (_permissions: RolePermissions) => true,
   },
 ] as const;
 
@@ -70,8 +61,8 @@ export default function TabLayout() {
   const { user, isLoading, permissions } = useAuth();
 
   const visibleTabs = useMemo(() => {
-    return TAB_CONFIG.filter((tab) => tab.isVisible(permissions));
-  }, [permissions]);
+    return TAB_CONFIG.filter((tab) => permissions.accessibleTabs.includes(tab.name));
+  }, [permissions.accessibleTabs]);
 
   if (isLoading) {
     return (

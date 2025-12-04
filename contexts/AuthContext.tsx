@@ -39,6 +39,15 @@ const INITIAL_USERS: User[] = [
   },
 ];
 
+type AppTabName =
+  | 'index'
+  | 'vehicles'
+  | 'work-orders'
+  | 'workshops'
+  | 'clients'
+  | 'users'
+  | 'settings';
+
 type RolePermissions = {
   canManageWorkshops: boolean;
   canManageUsers: boolean;
@@ -47,6 +56,7 @@ type RolePermissions = {
   canManageWorkOrders: boolean;
   canAssignWorkOrders: boolean;
   viewOnlyAssignedWorkOrders: boolean;
+  accessibleTabs: readonly AppTabName[];
 };
 
 const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
@@ -58,15 +68,17 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canManageWorkOrders: true,
     canAssignWorkOrders: true,
     viewOnlyAssignedWorkOrders: false,
+    accessibleTabs: ['index', 'vehicles', 'work-orders', 'workshops', 'clients', 'users', 'settings'],
   },
   technician: {
     canManageWorkshops: false,
-    canManageUsers: true,
+    canManageUsers: false,
     canManageVehicles: true,
     canManageClients: true,
     canManageWorkOrders: true,
     canAssignWorkOrders: true,
     viewOnlyAssignedWorkOrders: false,
+    accessibleTabs: ['index', 'vehicles', 'work-orders', 'clients', 'settings'],
   },
   mechanic: {
     canManageWorkshops: false,
@@ -76,6 +88,7 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canManageWorkOrders: false,
     canAssignWorkOrders: false,
     viewOnlyAssignedWorkOrders: true,
+    accessibleTabs: ['index', 'work-orders', 'settings'],
   },
 };
 
@@ -164,4 +177,4 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   };
 });
 
-export type { RolePermissions };
+export type { RolePermissions, AppTabName };
