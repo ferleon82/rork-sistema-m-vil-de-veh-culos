@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'technician' | 'mechanic';
+export type UserRole = 'admin' | 'technician' | 'mechanic' | 'client';
 
 export interface Client {
   id: string;
@@ -20,6 +20,7 @@ export interface User {
   countryCode: string;
   phone?: string;
   password: string;
+  clientId?: string;
 }
 
 export interface Workshop {
