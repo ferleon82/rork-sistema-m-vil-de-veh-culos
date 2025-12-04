@@ -535,7 +535,7 @@ export default function WorkOrdersScreen() {
                 style={[styles.textInput, styles.itemNumbersInput]}
                 value={String(item.unitPrice)}
                 onChangeText={(text) => onChange(item.id, 'unitPrice', text)}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
               />
             </View>
             <View style={styles.itemTotalPill}>
