@@ -73,6 +73,7 @@ export interface WorkOrder {
   totalCost: number;
   createdBy: string;
   assignedTo?: string;
+  checkInAt: string;
   createdAt: string;
   startedAt?: string;
   completedAt?: string;

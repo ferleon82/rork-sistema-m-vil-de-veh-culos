@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,93 @@ import {
   TextInput,
   FlatList,
 } from 'react-native';
-import { MessageCircle, FileText, CheckCircle2, Plus, User, ChevronDown, Search, Edit, ShieldAlert, Trash2 } from 'lucide-react-native';
+import {
+  MessageCircle,
+  FileText,
+  CheckCircle2,
+  Plus,
+  User,
+  ChevronDown,
+  Search,
+  Edit,
+  ShieldAlert,
+  Trash2,
+  ClipboardList,
+} from 'lucide-react-native';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useUsers } from '@/contexts/UsersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendStatusUpdate, sendBudget } from '@/utils/whatsapp';
-import { WorkOrderStatus, WorkOrderItem } from '@/types';
+import { WorkOrder, WorkOrderItem, WorkOrderStatus } from '@/types';
+
+const formatDateInput = (date: Date) => date.toISOString().split('T')[0];
+const formatTimeInput = (date: Date) => date.toISOString().split('T')[1]?.slice(0, 5) ?? '00:00';
+const normalizeNumberInput = (value: string) => Number(value.replace(',', '.')) || 0;
+const buildIsoFromInputs = (date: string, time: string) => {
+  const candidate = `${date}T${time}:00`;
+  const parsed = new Date(candidate);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString();
+};
+const formatDateTimeLabel = (isoValue?: string) => {
+  if (!isoValue) return 'Sin registro';
+  const date = new Date(isoValue);
+  if (Number.isNaN(date.getTime())) return 'Sin registro';
+  return date.toLocaleString('es-EC', { dateStyle: 'medium', timeStyle: 'short' });
+};
+const getDurationLabel = (startIso?: string, endIso?: string) => {
+  if (!startIso) return 'Sin registro';
+  const start = new Date(startIso);
+  const end = endIso ? new Date(endIso) : new Date();
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 'Sin registro';
+  }
+  const diff = Math.max(end.getTime() - start.getTime(), 0);
+  const minutes = Math.floor(diff / 60000);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const remainingMinutes = minutes % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (!days && !hours) {
+    parts.push(`${remainingMinutes}m`);
+  } else if (remainingMinutes) {
+    parts.push(`${remainingMinutes}m`);
+  }
+  return parts.join(' ');
+};
+const createEmptyItem = (): WorkOrderItem => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  description: '',
+  quantity: 1,
+  unitPrice: 0,
+  total: 0,
+});
+const splitIsoToInputs = (iso?: string) => {
+  const fallback = new Date();
+  if (!iso) {
+    return {
+      date: formatDateInput(fallback),
+      time: formatTimeInput(fallback),
+    };
+  }
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    return {
+      date: formatDateInput(fallback),
+      time: formatTimeInput(fallback),
+    };
+  }
+  return {
+    date: formatDateInput(parsed),
+    time: formatTimeInput(parsed),
+  };
+};
+const cloneItems = (items: WorkOrderItem[]) => items.map((item) => ({ ...item }));
 
 type WorkOrderFormState = {
   vehicleId: string;
@@ -24,17 +104,24 @@ type WorkOrderFormState = {
   diagnosis: string;
   priority: 'low' | 'medium' | 'high';
   assignedTo: string;
+  checkInDate: string;
+  checkInTime: string;
   items: WorkOrderItem[];
 };
 
-const createInitialFormState = (): WorkOrderFormState => ({
-  vehicleId: '',
-  description: '',
-  diagnosis: '',
-  priority: 'medium',
-  assignedTo: '',
-  items: [],
-});
+const createInitialFormState = (): WorkOrderFormState => {
+  const now = new Date();
+  return {
+    vehicleId: '',
+    description: '',
+    diagnosis: '',
+    priority: 'medium',
+    assignedTo: '',
+    checkInDate: formatDateInput(now),
+    checkInTime: formatTimeInput(now),
+    items: [],
+  };
+};
 
 export default function WorkOrdersScreen() {
   const { workOrders, updateWorkOrderStatus, addWorkOrder, updateWorkOrder, deleteWorkOrder } = useWorkOrders();
@@ -50,7 +137,10 @@ export default function WorkOrdersScreen() {
   const [showMechanicSelector, setShowMechanicSelector] = useState<boolean>(false);
   const [formData, setFormData] = useState<WorkOrderFormState>(createInitialFormState);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
-  
+  const [breakdownModalVisible, setBreakdownModalVisible] = useState<boolean>(false);
+  const [breakdownItems, setBreakdownItems] = useState<WorkOrderItem[]>([]);
+  const [breakdownOrder, setBreakdownOrder] = useState<WorkOrder | null>(null);
+
   const mechanics = getMechanics();
 
   const scopedOrders = useMemo(() => {
@@ -108,6 +198,8 @@ export default function WorkOrdersScreen() {
     return texts[status] || status;
   };
 
+  const canManageBreakdown = (order: WorkOrder) => canManageOrders || (viewOnlyAssigned && order.assignedTo === user?.id);
+
   const handleSendStatusUpdate = async (orderId: string) => {
     const order = workOrders.find((wo) => wo.id === orderId);
     if (!order) return;
@@ -119,6 +211,7 @@ export default function WorkOrdersScreen() {
     }
 
     setSendingId(orderId);
+    console.log('[WorkOrders] Sending status update', { orderId });
     const success = await sendStatusUpdate(order, vehicle);
     setSendingId(null);
 
@@ -143,6 +236,7 @@ export default function WorkOrdersScreen() {
     }
 
     setSendingId(orderId);
+    console.log('[WorkOrders] Sending budget', { orderId, itemCount: order.items.length });
     const success = await sendBudget(order, vehicle);
     setSendingId(null);
 
@@ -168,6 +262,7 @@ export default function WorkOrdersScreen() {
       statusOptions.map((option) => ({
         text: option.label,
         onPress: async () => {
+          console.log('[WorkOrders] Changing status', { orderId, from: currentStatus, to: option.value });
           await updateWorkOrderStatus(orderId, option.value);
           Alert.alert('Éxito', 'Estado actualizado');
         },
@@ -180,6 +275,7 @@ export default function WorkOrdersScreen() {
       Alert.alert('Rol restringido', 'Solo administradores o técnicos pueden crear órdenes');
       return;
     }
+    console.log('[WorkOrders] Opening create modal');
     setFormData(createInitialFormState());
     setEditingOrderId(null);
     setModalVisible(true);
@@ -193,24 +289,28 @@ export default function WorkOrdersScreen() {
     setShowMechanicSelector(false);
   };
 
-  const handleEditOrder = (order: typeof workOrders[0]) => {
+  const handleEditOrder = (order: WorkOrder) => {
     if (!canManageOrders) {
       Alert.alert('Rol restringido', 'No puedes editar órdenes en tu rol actual');
       return;
     }
+    const checkInParts = splitIsoToInputs(order.checkInAt ?? order.createdAt);
+    console.log('[WorkOrders] Opening edit modal', { orderId: order.id });
     setFormData({
       vehicleId: order.vehicleId,
       description: order.description,
       diagnosis: order.diagnosis ?? '',
       priority: order.priority,
       assignedTo: order.assignedTo ?? '',
-      items: order.items,
+      checkInDate: checkInParts.date,
+      checkInTime: checkInParts.time,
+      items: cloneItems(order.items),
     });
     setEditingOrderId(order.id);
     setModalVisible(true);
   };
 
-  const handleDeleteOrder = (order: typeof workOrders[0]) => {
+  const handleDeleteOrder = (order: WorkOrder) => {
     if (!canManageOrders) {
       Alert.alert('Rol restringido', 'No puedes eliminar órdenes en tu rol actual');
       return;
@@ -225,12 +325,38 @@ export default function WorkOrdersScreen() {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
+            console.log('[WorkOrders] Deleting order', { orderId: order.id });
             await deleteWorkOrder(order.id);
             Alert.alert('Éxito', 'Orden eliminada correctamente');
           },
         },
       ]
     );
+  };
+
+  const handleFormItemChange = (itemId: string, field: 'description' | 'quantity' | 'unitPrice', value: string) => {
+    setFormData((prev) => {
+      const updatedItems = prev.items.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+        if (field === 'description') {
+          return { ...item, description: value };
+        }
+        const numericValue = normalizeNumberInput(value);
+        const nextItem = { ...item, [field]: numericValue } as WorkOrderItem;
+        return { ...nextItem, total: parseFloat((nextItem.quantity * nextItem.unitPrice).toFixed(2)) };
+      });
+      return { ...prev, items: updatedItems };
+    });
+  };
+
+  const handleAddFormItem = () => {
+    setFormData((prev) => ({ ...prev, items: [...prev.items, createEmptyItem()] }));
+  };
+
+  const handleRemoveFormItem = (itemId: string) => {
+    setFormData((prev) => ({ ...prev, items: prev.items.filter((item) => item.id !== itemId) }));
   };
 
   const handleSubmitWorkOrder = async () => {
@@ -242,18 +368,24 @@ export default function WorkOrdersScreen() {
       Alert.alert('Error', 'Por favor selecciona un vehículo y describe el trabajo');
       return;
     }
-
     if (!formData.assignedTo) {
       Alert.alert('Error', 'Por favor asigna un mecánico');
       return;
     }
 
+    const checkInAt = buildIsoFromInputs(formData.checkInDate, formData.checkInTime);
+    if (!checkInAt) {
+      Alert.alert('Error', 'Fecha u hora de ingreso inválida');
+      return;
+    }
+
     const trimmedDiagnosis = formData.diagnosis.trim();
     const normalizedDiagnosis = trimmedDiagnosis.length > 0 ? trimmedDiagnosis : undefined;
+    const totalCost = formData.items.reduce((sum, item) => sum + item.total, 0);
 
     try {
       if (editingOrderId) {
-        const totalCost = formData.items.reduce((sum, item) => sum + item.total, 0);
+        console.log('[WorkOrders] Updating order', { orderId: editingOrderId, totalCost });
         await updateWorkOrder(editingOrderId, {
           vehicleId: formData.vehicleId,
           description: formData.description,
@@ -262,9 +394,11 @@ export default function WorkOrdersScreen() {
           assignedTo: formData.assignedTo,
           items: formData.items,
           totalCost,
+          checkInAt,
         });
         Alert.alert('Éxito', 'Orden de trabajo actualizada correctamente');
       } else {
+        console.log('[WorkOrders] Creating order', { vehicleId: formData.vehicleId, assignedTo: formData.assignedTo });
         await addWorkOrder({
           vehicleId: formData.vehicleId,
           description: formData.description,
@@ -274,6 +408,7 @@ export default function WorkOrdersScreen() {
           items: formData.items,
           createdBy: user?.id || '',
           assignedTo: formData.assignedTo,
+          checkInAt,
         });
         Alert.alert('Éxito', 'Orden de trabajo creada correctamente');
       }
@@ -284,15 +419,144 @@ export default function WorkOrdersScreen() {
     }
   };
 
-  const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
-  const selectedMechanic = mechanics.find(m => m.id === formData.assignedTo);
+  const handleOpenBreakdownModal = (order: WorkOrder) => {
+    if (!canManageBreakdown(order)) {
+      Alert.alert('Rol restringido', 'No puedes editar el desglose de esta orden');
+      return;
+    }
+    console.log('[WorkOrders] Opening breakdown editor', { orderId: order.id });
+    setBreakdownOrder(order);
+    setBreakdownItems(order.items.length ? cloneItems(order.items) : [createEmptyItem()]);
+    setBreakdownModalVisible(true);
+  };
+
+  const handleCloseBreakdownModal = () => {
+    setBreakdownModalVisible(false);
+    setBreakdownOrder(null);
+    setBreakdownItems([]);
+  };
+
+  const handleBreakdownItemChange = (itemId: string, field: 'description' | 'quantity' | 'unitPrice', value: string) => {
+    setBreakdownItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+        if (field === 'description') {
+          return { ...item, description: value };
+        }
+        const numericValue = normalizeNumberInput(value);
+        const nextItem = { ...item, [field]: numericValue } as WorkOrderItem;
+        return { ...nextItem, total: parseFloat((nextItem.quantity * nextItem.unitPrice).toFixed(2)) };
+      })
+    );
+  };
+
+  const handleAddBreakdownItem = () => {
+    setBreakdownItems((prev) => [...prev, createEmptyItem()]);
+  };
+
+  const handleRemoveBreakdownItem = (itemId: string) => {
+    setBreakdownItems((prev) => prev.filter((item) => item.id !== itemId));
+  };
+
+  const handleSaveBreakdown = async () => {
+    if (!breakdownOrder) return;
+    const sanitizedItems = breakdownItems
+      .map((item) => ({
+        ...item,
+        description: item.description.trim(),
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: parseFloat((item.quantity * item.unitPrice).toFixed(2)),
+      }))
+      .filter((item) => item.description.length > 0 && item.total >= 0);
+
+    if (sanitizedItems.length === 0) {
+      Alert.alert('Error', 'Registra al menos un trabajo con descripción');
+      return;
+    }
+
+    const totalCost = sanitizedItems.reduce((sum, item) => sum + item.total, 0);
+
+    try {
+      console.log('[WorkOrders] Saving breakdown', { orderId: breakdownOrder.id, itemCount: sanitizedItems.length });
+      await updateWorkOrder(breakdownOrder.id, {
+        items: sanitizedItems,
+        totalCost,
+      });
+      Alert.alert('Éxito', 'Desglose guardado correctamente');
+      handleCloseBreakdownModal();
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo guardar el desglose');
+      console.error(error);
+    }
+  };
+
+  const renderItemsEditor = (
+    items: WorkOrderItem[],
+    onChange: (itemId: string, field: 'description' | 'quantity' | 'unitPrice', value: string) => void,
+    onRemove: (itemId: string) => void,
+    testPrefix: string,
+  ) => (
+    <>
+      {items.map((item, index) => (
+        <View key={item.id} style={styles.itemEditorCard}>
+          <View style={styles.itemEditorHeader}>
+            <Text style={styles.itemEditorLabel}>Trabajo #{index + 1}</Text>
+            <TouchableOpacity
+              onPress={() => onRemove(item.id)}
+              style={styles.itemRemoveButton}
+              testID={`${testPrefix}-remove-item-${item.id}`}
+            >
+              <Trash2 size={16} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={[styles.textInput, styles.itemEditorInput]}
+            value={item.description}
+            onChangeText={(text) => onChange(item.id, 'description', text)}
+            placeholder="Descripción del trabajo"
+            placeholderTextColor="#9ca3af"
+          />
+          <View style={styles.itemNumbersRow}>
+            <View style={styles.itemNumberField}>
+              <Text style={styles.itemNumbersLabel}>Cantidad</Text>
+              <TextInput
+                style={[styles.textInput, styles.itemNumbersInput]}
+                value={String(item.quantity)}
+                onChangeText={(text) => onChange(item.id, 'quantity', text)}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={styles.itemNumberField}>
+              <Text style={styles.itemNumbersLabel}>Precio unitario</Text>
+              <TextInput
+                style={[styles.textInput, styles.itemNumbersInput]}
+                value={String(item.unitPrice)}
+                onChangeText={(text) => onChange(item.id, 'unitPrice', text)}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={styles.itemTotalPill}>
+              <Text style={styles.itemTotalLabel}>Total</Text>
+              <Text style={styles.itemTotalValue}>${item.total.toFixed(2)}</Text>
+            </View>
+          </View>
+        </View>
+      ))}
+    </>
+  );
+
+  const selectedVehicle = vehicles.find((v) => v.id === formData.vehicleId);
+  const selectedMechanic = mechanics.find((m) => m.id === formData.assignedTo);
   const isEditing = editingOrderId !== null;
 
-  const renderWorkOrder = ({ item: order }: { item: typeof workOrders[0] }) => {
+  const renderWorkOrder = ({ item: order }: { item: WorkOrder }) => {
     const vehicle = getVehicleById(order.vehicleId);
     const assignedMechanic = order.assignedTo ? getUserById(order.assignedTo) : null;
     const isSending = sendingId === order.id;
-    const canUpdateOrderStatus = canManageOrders || (viewOnlyAssigned && order.assignedTo === user?.id);
+    const canUpdateOrderStatus = canManageBreakdown(order);
 
     return (
       <View style={styles.card}>
@@ -306,13 +570,11 @@ export default function WorkOrdersScreen() {
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: getStatusColor(order.status) + '20' },
+                  { backgroundColor: `${getStatusColor(order.status)}20` },
                   !canUpdateOrderStatus && styles.statusBadgeDisabled,
                 ]}
               >
-                <Text
-                  style={[styles.statusText, { color: getStatusColor(order.status) }]}
-                >
+                <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
                   {getStatusText(order.status)}
                 </Text>
               </View>
@@ -367,7 +629,7 @@ export default function WorkOrdersScreen() {
           </View>
         )}
 
-        {order.items.length > 0 && (
+        {order.items.length > 0 ? (
           <View style={styles.itemsSection}>
             <Text style={styles.itemsLabel}>Trabajos ({order.items.length}):</Text>
             {order.items.slice(0, 3).map((item) => (
@@ -379,17 +641,30 @@ export default function WorkOrdersScreen() {
               </View>
             ))}
             {order.items.length > 3 && (
-              <Text style={styles.moreItems}>
-                +{order.items.length - 3} más...
-              </Text>
+              <Text style={styles.moreItems}>+{order.items.length - 3} más...</Text>
             )}
           </View>
+        ) : (
+          <View style={styles.emptyItemsBox}>
+            <Text style={styles.emptyItemsText}>El mecánico aún no registra trabajos.</Text>
+          </View>
+        )}
+
+        {canManageBreakdown(order) && (
+          <TouchableOpacity
+            style={styles.breakdownButton}
+            onPress={() => handleOpenBreakdownModal(order)}
+            testID={`open-breakdown-${order.id}`}
+          >
+            <ClipboardList size={18} color="#2563eb" />
+            <Text style={styles.breakdownButtonText}>Registrar trabajos</Text>
+          </TouchableOpacity>
         )}
 
         <View style={styles.footer}>
           <View style={styles.totalSection}>
             <Text style={styles.totalLabel}>Total:</Text>
-            <Text style={styles.totalAmount}>${order.totalCost}</Text>
+            <Text style={styles.totalAmount}>${order.totalCost.toFixed(2)}</Text>
           </View>
 
           <View style={styles.actions}>
@@ -414,6 +689,17 @@ export default function WorkOrdersScreen() {
                 {isSending ? 'Enviando...' : 'Notificar Estado'}
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.timelineSection}>
+          <View style={styles.timelineRow}>
+            <Text style={styles.timelineLabel}>Ingreso:</Text>
+            <Text style={styles.timelineValue}>{formatDateTimeLabel(order.checkInAt)}</Text>
+          </View>
+          <View style={styles.timelineRow}>
+            <Text style={styles.timelineLabel}>Tiempo en taller:</Text>
+            <Text style={styles.timelineValue}>{getDurationLabel(order.checkInAt, order.completedAt)}</Text>
           </View>
         </View>
 
@@ -507,10 +793,9 @@ export default function WorkOrdersScreen() {
                 onPress={() => setShowVehicleSelector(true)}
               >
                 <Text style={selectedVehicle ? styles.selectorTextSelected : styles.selectorTextPlaceholder}>
-                  {selectedVehicle 
+                  {selectedVehicle
                     ? `${selectedVehicle.brand} ${selectedVehicle.model} - ${selectedVehicle.plate}`
-                    : 'Seleccionar vehículo'
-                  }
+                    : 'Seleccionar vehículo'}
                 </Text>
                 <ChevronDown size={20} color="#6b7280" />
               </TouchableOpacity>
@@ -577,6 +862,42 @@ export default function WorkOrdersScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={styles.inputLabel}>Fecha y hora de ingreso *</Text>
+              <View style={styles.inlineInputs}>
+                <TextInput
+                  style={[styles.textInput, styles.dateInput]}
+                  value={formData.checkInDate}
+                  onChangeText={(text) => setFormData({ ...formData, checkInDate: text })}
+                  placeholder="AAAA-MM-DD"
+                  placeholderTextColor="#9ca3af"
+                />
+                <TextInput
+                  style={[styles.textInput, styles.timeInput]}
+                  value={formData.checkInTime}
+                  onChangeText={(text) => setFormData({ ...formData, checkInTime: text })}
+                  placeholder="HH:MM"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+
+              <Text style={styles.inputLabel}>Desglose de trabajos</Text>
+              {formData.items.length === 0 ? (
+                <View style={styles.emptyItemsBox}>
+                  <Text style={styles.emptyItemsText}>Aún no registras trabajos.</Text>
+                </View>
+              ) : (
+                renderItemsEditor(formData.items, handleFormItemChange, handleRemoveFormItem, 'form')
+              )}
+
+              <TouchableOpacity
+                style={styles.addItemButton}
+                onPress={handleAddFormItem}
+                testID="add-work-order-item-button"
+              >
+                <Plus size={18} color="#2563eb" />
+                <Text style={styles.addItemButtonText}>Agregar rubro</Text>
+              </TouchableOpacity>
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -671,9 +992,7 @@ export default function WorkOrdersScreen() {
                       <Text style={styles.selectorItemTitle}>{item.name}</Text>
                     </View>
                     <Text style={styles.selectorItemSubtitle}>{item.email}</Text>
-                    {item.phone && (
-                      <Text style={styles.selectorItemOwner}>{item.phone}</Text>
-                    )}
+                    {item.phone && <Text style={styles.selectorItemOwner}>{item.phone}</Text>}
                   </View>
                 </TouchableOpacity>
               )}
@@ -690,6 +1009,55 @@ export default function WorkOrdersScreen() {
             >
               <Text style={styles.closeSelectorButtonText}>Cerrar</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={breakdownModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCloseBreakdownModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>Registrar trabajos</Text>
+              {breakdownOrder && (
+                <View style={styles.breakdownSummary}>
+                  <Text style={styles.breakdownSummaryText}>{breakdownOrder.code}</Text>
+                  <Text style={styles.breakdownSummarySubtext}>{breakdownOrder.description}</Text>
+                </View>
+              )}
+
+              {renderItemsEditor(breakdownItems, handleBreakdownItemChange, handleRemoveBreakdownItem, 'breakdown')}
+
+              <TouchableOpacity
+                style={styles.addItemButton}
+                onPress={handleAddBreakdownItem}
+                testID="add-breakdown-item-button"
+              >
+                <Plus size={18} color="#2563eb" />
+                <Text style={styles.addItemButtonText}>Agregar rubro</Text>
+              </TouchableOpacity>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={handleCloseBreakdownModal}
+                >
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.submitButton]}
+                  onPress={handleSaveBreakdown}
+                  testID="save-breakdown-button"
+                >
+                  <Text style={styles.submitButtonText}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -939,6 +1307,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
   },
+  timelineSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    gap: 4,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  timelineLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  timelineValue: {
+    fontSize: 13,
+    color: '#1f2937',
+    fontWeight: '500' as const,
+  },
   dateSection: {
     marginTop: 12,
     paddingTop: 12,
@@ -1064,6 +1453,16 @@ const styles = StyleSheet.create({
   priorityTextSelected: {
     color: '#fff',
   },
+  inlineInputs: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateInput: {
+    flex: 1,
+  },
+  timeInput: {
+    width: 110,
+  },
   modalButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -1156,5 +1555,120 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#6b7280',
+  },
+  breakdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: '#eef2ff',
+    marginBottom: 8,
+  },
+  breakdownButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1d4ed8',
+  },
+  itemEditorCard: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  itemEditorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  itemEditorLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1f2937',
+  },
+  itemRemoveButton: {
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: '#fee2e2',
+  },
+  itemEditorInput: {
+    minHeight: 0,
+  },
+  itemNumbersRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-end',
+  },
+  itemNumberField: {
+    flex: 1,
+    gap: 6,
+  },
+  itemNumbersLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  itemNumbersInput: {
+    minHeight: 0,
+  },
+  itemTotalPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#ecfccb',
+    alignItems: 'center',
+  },
+  itemTotalLabel: {
+    fontSize: 12,
+    color: '#4d7c0f',
+  },
+  itemTotalValue: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#3f6212',
+  },
+  emptyItemsBox: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    marginBottom: 12,
+  },
+  emptyItemsText: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  addItemButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#e0f2fe',
+    marginTop: 4,
+  },
+  addItemButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#0369a1',
+  },
+  breakdownSummary: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#eef2ff',
+  },
+  breakdownSummaryText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#312e81',
+  },
+  breakdownSummarySubtext: {
+    fontSize: 13,
+    color: '#4338ca',
+    marginTop: 4,
   },
 });
