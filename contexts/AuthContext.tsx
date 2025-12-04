@@ -90,6 +90,16 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     viewOnlyAssignedWorkOrders: true,
     accessibleTabs: ['index', 'work-orders', 'settings'],
   },
+  client: {
+    canManageWorkshops: false,
+    canManageUsers: false,
+    canManageVehicles: false,
+    canManageClients: false,
+    canManageWorkOrders: false,
+    canAssignWorkOrders: false,
+    viewOnlyAssignedWorkOrders: true,
+    accessibleTabs: ['index', 'work-orders', 'clients', 'settings'],
+  },
 };
 
 const getPermissions = (role?: UserRole): RolePermissions => {
