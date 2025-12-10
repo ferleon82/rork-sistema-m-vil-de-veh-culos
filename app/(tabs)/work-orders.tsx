@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,44 @@ import { WorkOrder, WorkOrderItem, WorkOrderStatus } from '@/types';
 const formatDateInput = (date: Date) => date.toISOString().split('T')[0];
 const formatTimeInput = (date: Date) => date.toISOString().split('T')[1]?.slice(0, 5) ?? '00:00';
 const normalizeNumberInput = (value: string) => Number(value.replace(',', '.')) || 0;
+const formatUnitPriceDisplay = (value: number) => {
+  if (Number.isNaN(value) || value === 0) {
+    return '';
+  }
+  return parseFloat(value.toFixed(2)).toString();
+};
+const sanitizeDecimalInput = (value: string) => {
+  if (!value) {
+    return '';
+  }
+  const cleaned = value.replace(/[^\d.,]/g, '').replace(',', '.');
+  if (!cleaned) {
+    return '';
+  }
+  const hasDecimal = cleaned.includes('.');
+  const [integerPartRaw, decimalPartRaw] = cleaned.split('.');
+  const integerPart = integerPartRaw ?? '';
+  const decimals = decimalPartRaw ?? '';
+  let result = integerPart;
+  if (hasDecimal) {
+    result += '.';
+    result += decimals.slice(0, 2);
+  }
+  if (result.startsWith('.')) {
+    result = `0${result}`;
+  }
+  return result;
+};
+const parsePriceFromInput = (value: string) => {
+  if (!value || value === '.' || value === '0.') {
+    return 0;
+  }
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) {
+    return 0;
+  }
+  return Number(parsed.toFixed(2));
+};
 const buildIsoFromInputs = (date: string, time: string) => {
   const candidate = `${date}T${time}:00`;
   const parsed = new Date(candidate);
@@ -140,8 +178,46 @@ export default function WorkOrdersScreen() {
   const [breakdownModalVisible, setBreakdownModalVisible] = useState<boolean>(false);
   const [breakdownItems, setBreakdownItems] = useState<WorkOrderItem[]>([]);
   const [breakdownOrder, setBreakdownOrder] = useState<WorkOrder | null>(null);
+  const [unitPriceInputs, setUnitPriceInputs] = useState<Record<string, string>>({});
+  const [breakdownUnitPriceInputs, setBreakdownUnitPriceInputs] = useState<Record<string, string>>({});
 
   const mechanics = getMechanics();
+
+  useEffect(() => {
+    setUnitPriceInputs((prev) => {
+      const next: Record<string, string> = {};
+      formData.items.forEach((item) => {
+        next[item.id] = Object.prototype.hasOwnProperty.call(prev, item.id)
+          ? prev[item.id]
+          : formatUnitPriceDisplay(item.unitPrice);
+      });
+      if (
+        Object.keys(prev).length === Object.keys(next).length &&
+        formData.items.every((item) => prev[item.id] === next[item.id])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [formData.items]);
+
+  useEffect(() => {
+    setBreakdownUnitPriceInputs((prev) => {
+      const next: Record<string, string> = {};
+      breakdownItems.forEach((item) => {
+        next[item.id] = Object.prototype.hasOwnProperty.call(prev, item.id)
+          ? prev[item.id]
+          : formatUnitPriceDisplay(item.unitPrice);
+      });
+      if (
+        Object.keys(prev).length === Object.keys(next).length &&
+        breakdownItems.every((item) => prev[item.id] === next[item.id])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [breakdownItems]);
 
   const scopedOrders = useMemo(() => {
     if (!viewOnlyAssigned) {
@@ -335,6 +411,22 @@ export default function WorkOrdersScreen() {
   };
 
   const handleFormItemChange = (itemId: string, field: 'description' | 'quantity' | 'unitPrice', value: string) => {
+    if (field === 'unitPrice') {
+      const sanitized = sanitizeDecimalInput(value);
+      setUnitPriceInputs((prev) => ({ ...prev, [itemId]: sanitized }));
+      const numericValue = parsePriceFromInput(sanitized);
+      setFormData((prev) => {
+        const updatedItems = prev.items.map((item) => {
+          if (item.id !== itemId) {
+            return item;
+          }
+          const nextItem = { ...item, unitPrice: numericValue };
+          return { ...nextItem, total: parseFloat((nextItem.quantity * nextItem.unitPrice).toFixed(2)) };
+        });
+        return { ...prev, items: updatedItems };
+      });
+      return;
+    }
     setFormData((prev) => {
       const updatedItems = prev.items.map((item) => {
         if (item.id !== itemId) {
@@ -344,7 +436,7 @@ export default function WorkOrdersScreen() {
           return { ...item, description: value };
         }
         const numericValue = normalizeNumberInput(value);
-        const nextItem = { ...item, [field]: numericValue } as WorkOrderItem;
+        const nextItem = { ...item, quantity: numericValue };
         return { ...nextItem, total: parseFloat((nextItem.quantity * nextItem.unitPrice).toFixed(2)) };
       });
       return { ...prev, items: updatedItems };
@@ -437,6 +529,21 @@ export default function WorkOrdersScreen() {
   };
 
   const handleBreakdownItemChange = (itemId: string, field: 'description' | 'quantity' | 'unitPrice', value: string) => {
+    if (field === 'unitPrice') {
+      const sanitized = sanitizeDecimalInput(value);
+      setBreakdownUnitPriceInputs((prev) => ({ ...prev, [itemId]: sanitized }));
+      const numericValue = parsePriceFromInput(sanitized);
+      setBreakdownItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== itemId) {
+            return item;
+          }
+          const nextItem = { ...item, unitPrice: numericValue };
+          return { ...nextItem, total: parseFloat((nextItem.quantity * nextItem.unitPrice).toFixed(2)) };
+        })
+      );
+      return;
+    }
     setBreakdownItems((prev) =>
       prev.map((item) => {
         if (item.id !== itemId) {
@@ -446,7 +553,7 @@ export default function WorkOrdersScreen() {
           return { ...item, description: value };
         }
         const numericValue = normalizeNumberInput(value);
-        const nextItem = { ...item, [field]: numericValue } as WorkOrderItem;
+        const nextItem = { ...item, quantity: numericValue };
         return { ...nextItem, total: parseFloat((nextItem.quantity * nextItem.unitPrice).toFixed(2)) };
       })
     );
@@ -498,6 +605,7 @@ export default function WorkOrdersScreen() {
     onChange: (itemId: string, field: 'description' | 'quantity' | 'unitPrice', value: string) => void,
     onRemove: (itemId: string) => void,
     testPrefix: string,
+    priceInputs: Record<string, string>,
   ) => (
     <>
       {items.map((item, index) => (
@@ -533,7 +641,7 @@ export default function WorkOrdersScreen() {
               <Text style={styles.itemNumbersLabel}>Precio unitario</Text>
               <TextInput
                 style={[styles.textInput, styles.itemNumbersInput]}
-                value={String(item.unitPrice)}
+                value={priceInputs[item.id] ?? formatUnitPriceDisplay(item.unitPrice)}
                 onChangeText={(text) => onChange(item.id, 'unitPrice', text)}
                 keyboardType="decimal-pad"
               />
@@ -887,7 +995,7 @@ export default function WorkOrdersScreen() {
                   <Text style={styles.emptyItemsText}>Aún no registras trabajos.</Text>
                 </View>
               ) : (
-                renderItemsEditor(formData.items, handleFormItemChange, handleRemoveFormItem, 'form')
+                renderItemsEditor(formData.items, handleFormItemChange, handleRemoveFormItem, 'form', unitPriceInputs)
               )}
 
               <TouchableOpacity
@@ -1030,7 +1138,13 @@ export default function WorkOrdersScreen() {
                 </View>
               )}
 
-              {renderItemsEditor(breakdownItems, handleBreakdownItemChange, handleRemoveBreakdownItem, 'breakdown')}
+              {renderItemsEditor(
+                breakdownItems,
+                handleBreakdownItemChange,
+                handleRemoveBreakdownItem,
+                'breakdown',
+                breakdownUnitPriceInputs,
+              )}
 
               <TouchableOpacity
                 style={styles.addItemButton}
