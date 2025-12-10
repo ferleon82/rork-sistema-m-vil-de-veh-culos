@@ -39,21 +39,26 @@ type UserFormData = {
 
 export default function UsersScreen() {
   const { isAdmin, permissions } = useAuth();
+  const assignableRoles = permissions.assignableRoles;
+  const defaultRoleForCreation: UserRole = assignableRoles.includes('mechanic')
+    ? 'mechanic'
+    : assignableRoles[0] ?? 'mechanic';
   const { users, addUser, updateUser, deleteUser } = useUsers();
   const canManageUsers = permissions.canManageUsers;
-  const availableRoles: UserRole[] = isAdmin
-    ? ['admin', 'technician', 'mechanic']
-    : ['technician', 'mechanic'];
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const roleOptions: UserRole[] =
+    editingUser && !assignableRoles.includes(editingUser.role)
+      ? [...assignableRoles, editingUser.role]
+      : [...assignableRoles];
   const [formData, setFormData] = useState<UserFormData>({
     name: '',
     email: '',
     phone: '',
     countryCode: 'EC',
-    role: 'mechanic',
+    role: defaultRoleForCreation,
     password: '',
     confirmPassword: '',
   });
@@ -95,7 +100,7 @@ export default function UsersScreen() {
         email: '',
         phone: '',
         countryCode: 'EC',
-        role: 'mechanic',
+        role: defaultRoleForCreation,
         password: '',
         confirmPassword: '',
       });
@@ -140,6 +145,14 @@ export default function UsersScreen() {
 
     if (!passwordToPersist) {
       Alert.alert('Error', 'Debes definir una contraseña para este usuario');
+      return;
+    }
+
+    const canAssignSelectedRole =
+      permissions.assignableRoles.includes(formData.role) || editingUser?.role === formData.role;
+
+    if (!canAssignSelectedRole) {
+      Alert.alert('Permiso denegado', 'No tienes permisos para asignar este rol');
       return;
     }
 
@@ -337,7 +350,7 @@ export default function UsersScreen() {
         <Text style={styles.helperDescription}>
           {isAdmin
             ? 'Crea nuevas mecánicas y define los roles que colaborarán en la plataforma.'
-            : 'Gestiona el equipo de tu mecánica. Solo el administrador maestro puede crear nuevos administradores.'}
+            : 'Gestiona el equipo de tu mecánica. Solo puedes registrar nuevos mecánicos; los técnicos los crea el administrador maestro.'}
         </Text>
       </View>
 
@@ -439,7 +452,7 @@ export default function UsersScreen() {
 
               <Text style={styles.label}>Rol *</Text>
               <View style={styles.roleSelector}>
-                {availableRoles.map((role) => (
+                {roleOptions.map((role) => (
                   <TouchableOpacity
                     key={role}
                     style={[

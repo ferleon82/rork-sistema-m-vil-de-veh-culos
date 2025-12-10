@@ -57,6 +57,7 @@ type RolePermissions = {
   canAssignWorkOrders: boolean;
   viewOnlyAssignedWorkOrders: boolean;
   accessibleTabs: readonly AppTabName[];
+  assignableRoles: readonly UserRole[];
 };
 
 const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
@@ -69,6 +70,7 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canAssignWorkOrders: true,
     viewOnlyAssignedWorkOrders: false,
     accessibleTabs: ['index', 'vehicles', 'work-orders', 'workshops', 'clients', 'users', 'settings'],
+    assignableRoles: ['admin', 'technician', 'mechanic'],
   },
   technician: {
     canManageWorkshops: false,
@@ -79,6 +81,7 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canAssignWorkOrders: true,
     viewOnlyAssignedWorkOrders: false,
     accessibleTabs: ['index', 'vehicles', 'work-orders', 'clients', 'users', 'settings'],
+    assignableRoles: ['mechanic'],
   },
   mechanic: {
     canManageWorkshops: false,
@@ -89,6 +92,7 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canAssignWorkOrders: false,
     viewOnlyAssignedWorkOrders: true,
     accessibleTabs: ['index', 'work-orders', 'settings'],
+    assignableRoles: [],
   },
 };
 
