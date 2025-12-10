@@ -42,8 +42,8 @@ export default function UsersScreen() {
   const { users, addUser, updateUser, deleteUser } = useUsers();
   const canManageUsers = permissions.canManageUsers;
   const availableRoles: UserRole[] = isAdmin
-    ? ['admin', 'technician', 'mechanic', 'client']
-    : ['technician', 'mechanic', 'client'];
+    ? ['admin', 'technician', 'mechanic']
+    : ['technician', 'mechanic'];
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
@@ -203,8 +203,6 @@ export default function UsersScreen() {
         return <Wrench size={20} color="#2563eb" />;
       case 'technician':
         return <UserIcon size={20} color="#059669" />;
-      case 'client':
-        return <UserIcon size={20} color="#f97316" />;
       default:
         return <UserIcon size={20} color="#6b7280" />;
     }
@@ -218,8 +216,6 @@ export default function UsersScreen() {
         return 'Mecánico';
       case 'technician':
         return 'Técnico';
-      case 'client':
-        return 'Cliente';
       default:
         return role;
     }
@@ -233,8 +229,6 @@ export default function UsersScreen() {
         return '#2563eb';
       case 'technician':
         return '#059669';
-      case 'client':
-        return '#f97316';
       default:
         return '#6b7280';
     }
