@@ -70,6 +70,9 @@ export interface WorkOrder {
   priority: 'low' | 'medium' | 'high';
   description: string;
   diagnosis?: string;
+  diagnosisCategoryId?: string;
+  diagnosisIssueId?: string;
+  diagnosisNotes?: string;
   items: WorkOrderItem[];
   totalCost: number;
   createdBy: string;

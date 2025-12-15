@@ -13,7 +13,9 @@ const DEMO_WORK_ORDERS: WorkOrder[] = [
     status: 'in_progress',
     priority: 'high',
     description: 'Mantenimiento preventivo 45,000 km',
-    diagnosis: 'Cambio de aceite, filtros y revisión general',
+    diagnosisCategoryId: 'maintenance',
+    diagnosisIssueId: 'general_inspection',
+    diagnosis: 'Mantenimiento preventivo: Revisión general',
     items: [
       { id: '1', description: 'Aceite sintético 5W-30', quantity: 4, unitPrice: 15, total: 60 },
       { id: '2', description: 'Filtro de aceite', quantity: 1, unitPrice: 12, total: 12 },
@@ -35,7 +37,10 @@ const DEMO_WORK_ORDERS: WorkOrder[] = [
     status: 'waiting_approval',
     priority: 'medium',
     description: 'Revisión de frenos',
-    diagnosis: 'Pastillas delanteras desgastadas al 80%, se recomienda reemplazo',
+    diagnosisCategoryId: 'brakes',
+    diagnosisIssueId: 'brake_pads_worn',
+    diagnosisNotes: 'Desgaste ~80%, se recomienda reemplazo',
+    diagnosis: 'Sistema de frenos: Pastillas de freno desgastadas — Desgaste ~80%, se recomienda reemplazo',
     items: [
       { id: '1', description: 'Pastillas de freno delanteras', quantity: 1, unitPrice: 85, total: 85 },
       { id: '2', description: 'Discos de freno', quantity: 2, unitPrice: 60, total: 120 },

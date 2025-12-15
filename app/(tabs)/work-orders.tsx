@@ -29,6 +29,11 @@ import { useUsers } from '@/contexts/UsersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendStatusUpdate, sendBudget } from '@/utils/whatsapp';
 import { WorkOrder, WorkOrderItem, WorkOrderStatus } from '@/types';
+import {
+  VEHICLE_DIAGNOSTICS,
+  findDiagnosticCategory,
+  findDiagnosticIssueLabel,
+} from '@/constants/vehicleDiagnostics';
 
 const formatDateInput = (date: Date) => date.toISOString().split('T')[0];
 const formatTimeInput = (date: Date) => date.toISOString().split('T')[1]?.slice(0, 5) ?? '00:00';
@@ -139,7 +144,9 @@ const cloneItems = (items: WorkOrderItem[]) => items.map((item) => ({ ...item })
 type WorkOrderFormState = {
   vehicleId: string;
   description: string;
-  diagnosis: string;
+  diagnosisCategoryId: string;
+  diagnosisIssueId: string;
+  diagnosisNotes: string;
   priority: 'low' | 'medium' | 'high';
   assignedTo: string;
   checkInDate: string;
@@ -152,13 +159,35 @@ const createInitialFormState = (): WorkOrderFormState => {
   return {
     vehicleId: '',
     description: '',
-    diagnosis: '',
+    diagnosisCategoryId: '',
+    diagnosisIssueId: '',
+    diagnosisNotes: '',
     priority: 'medium',
     assignedTo: '',
     checkInDate: formatDateInput(now),
     checkInTime: formatTimeInput(now),
     items: [],
   };
+};
+
+const buildDiagnosisSummary = (params: {
+  diagnosisCategoryId?: string;
+  diagnosisIssueId?: string;
+  diagnosisNotes?: string;
+}) => {
+  const { categoryLabel, issueLabel } = findDiagnosticIssueLabel(
+    params.diagnosisCategoryId,
+    params.diagnosisIssueId
+  );
+  const notes = params.diagnosisNotes?.trim() ?? '';
+  const main = [categoryLabel, issueLabel].filter(Boolean).join(': ');
+  if (!main && !notes) {
+    return undefined;
+  }
+  if (main && notes) {
+    return `${main} — ${notes}`;
+  }
+  return main || notes;
 };
 
 export default function WorkOrdersScreen() {
@@ -173,6 +202,8 @@ export default function WorkOrdersScreen() {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showVehicleSelector, setShowVehicleSelector] = useState<boolean>(false);
   const [showMechanicSelector, setShowMechanicSelector] = useState<boolean>(false);
+  const [showDiagnosisCategorySelector, setShowDiagnosisCategorySelector] = useState<boolean>(false);
+  const [showDiagnosisIssueSelector, setShowDiagnosisIssueSelector] = useState<boolean>(false);
   const [formData, setFormData] = useState<WorkOrderFormState>(createInitialFormState);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [breakdownModalVisible, setBreakdownModalVisible] = useState<boolean>(false);
@@ -363,6 +394,8 @@ export default function WorkOrdersScreen() {
     setFormData(createInitialFormState());
     setShowVehicleSelector(false);
     setShowMechanicSelector(false);
+    setShowDiagnosisCategorySelector(false);
+    setShowDiagnosisIssueSelector(false);
   };
 
   const handleEditOrder = (order: WorkOrder) => {
@@ -375,7 +408,9 @@ export default function WorkOrdersScreen() {
     setFormData({
       vehicleId: order.vehicleId,
       description: order.description,
-      diagnosis: order.diagnosis ?? '',
+      diagnosisCategoryId: order.diagnosisCategoryId ?? '',
+      diagnosisIssueId: order.diagnosisIssueId ?? '',
+      diagnosisNotes: order.diagnosisNotes ?? '',
       priority: order.priority,
       assignedTo: order.assignedTo ?? '',
       checkInDate: checkInParts.date,
@@ -471,8 +506,11 @@ export default function WorkOrdersScreen() {
       return;
     }
 
-    const trimmedDiagnosis = formData.diagnosis.trim();
-    const normalizedDiagnosis = trimmedDiagnosis.length > 0 ? trimmedDiagnosis : undefined;
+    const diagnosisSummary = buildDiagnosisSummary({
+      diagnosisCategoryId: formData.diagnosisCategoryId,
+      diagnosisIssueId: formData.diagnosisIssueId,
+      diagnosisNotes: formData.diagnosisNotes,
+    });
     const totalCost = formData.items.reduce((sum, item) => sum + item.total, 0);
 
     try {
@@ -481,7 +519,10 @@ export default function WorkOrdersScreen() {
         await updateWorkOrder(editingOrderId, {
           vehicleId: formData.vehicleId,
           description: formData.description,
-          diagnosis: normalizedDiagnosis,
+          diagnosisCategoryId: formData.diagnosisCategoryId || undefined,
+          diagnosisIssueId: formData.diagnosisIssueId || undefined,
+          diagnosisNotes: formData.diagnosisNotes.trim() ? formData.diagnosisNotes.trim() : undefined,
+          diagnosis: diagnosisSummary,
           priority: formData.priority,
           assignedTo: formData.assignedTo,
           items: formData.items,
@@ -494,7 +535,10 @@ export default function WorkOrdersScreen() {
         await addWorkOrder({
           vehicleId: formData.vehicleId,
           description: formData.description,
-          diagnosis: normalizedDiagnosis,
+          diagnosisCategoryId: formData.diagnosisCategoryId || undefined,
+          diagnosisIssueId: formData.diagnosisIssueId || undefined,
+          diagnosisNotes: formData.diagnosisNotes.trim() ? formData.diagnosisNotes.trim() : undefined,
+          diagnosis: diagnosisSummary,
           priority: formData.priority,
           status: 'pending',
           items: formData.items,
@@ -919,16 +963,82 @@ export default function WorkOrdersScreen() {
                 numberOfLines={3}
               />
 
-              <Text style={styles.inputLabel}>Diagnóstico</Text>
+              <Text style={styles.inputLabel}>Diagnóstico (categorizado)</Text>
+
+              <Text style={styles.fieldHint}>Selecciona el sistema y el problema para estadísticas.</Text>
+
+              <Text style={styles.inputSubLabel}>Sistema</Text>
+              <TouchableOpacity
+                style={styles.selector}
+                onPress={() => setShowDiagnosisCategorySelector(true)}
+                testID="diagnosis-category-selector"
+              >
+                <Text
+                  style={
+                    formData.diagnosisCategoryId ? styles.selectorTextSelected : styles.selectorTextPlaceholder
+                  }
+                >
+                  {formData.diagnosisCategoryId
+                    ? (findDiagnosticCategory(formData.diagnosisCategoryId)?.label ?? 'Seleccionar sistema')
+                    : 'Seleccionar sistema'}
+                </Text>
+                <ChevronDown size={20} color="#6b7280" />
+              </TouchableOpacity>
+
+              <Text style={styles.inputSubLabel}>Problema</Text>
+              <TouchableOpacity
+                style={[styles.selector, !formData.diagnosisCategoryId && styles.selectorDisabled]}
+                onPress={() => {
+                  if (!formData.diagnosisCategoryId) {
+                    Alert.alert('Selecciona un sistema', 'Primero elige el sistema para ver los problemas.');
+                    return;
+                  }
+                  setShowDiagnosisIssueSelector(true);
+                }}
+                testID="diagnosis-issue-selector"
+              >
+                <Text
+                  style={
+                    formData.diagnosisIssueId ? styles.selectorTextSelected : styles.selectorTextPlaceholder
+                  }
+                >
+                  {formData.diagnosisIssueId
+                    ? (findDiagnosticCategory(formData.diagnosisCategoryId)?.issues.find(
+                        (issue) => issue.id === formData.diagnosisIssueId
+                      )?.label ?? 'Seleccionar problema')
+                    : 'Seleccionar problema'}
+                </Text>
+                <ChevronDown size={20} color="#6b7280" />
+              </TouchableOpacity>
+
+              <Text style={styles.inputSubLabel}>Notas (opcional)</Text>
               <TextInput
-                style={[styles.textInput, styles.textArea]}
-                value={formData.diagnosis}
-                onChangeText={(text) => setFormData({ ...formData, diagnosis: text })}
-                placeholder="Diagnóstico detallado (opcional)"
+                style={[styles.textInput, styles.notesInput]}
+                value={formData.diagnosisNotes}
+                onChangeText={(text) => setFormData({ ...formData, diagnosisNotes: text })}
+                placeholder="Ej: ruido al frenar, desgaste 80%, fuga, etc."
                 placeholderTextColor="#9ca3af"
                 multiline
                 numberOfLines={2}
+                testID="diagnosis-notes-input"
               />
+
+              {buildDiagnosisSummary({
+                diagnosisCategoryId: formData.diagnosisCategoryId,
+                diagnosisIssueId: formData.diagnosisIssueId,
+                diagnosisNotes: formData.diagnosisNotes,
+              }) ? (
+                <View style={styles.diagnosisPreview}>
+                  <Text style={styles.diagnosisPreviewLabel}>Vista previa:</Text>
+                  <Text style={styles.diagnosisPreviewText}>
+                    {buildDiagnosisSummary({
+                      diagnosisCategoryId: formData.diagnosisCategoryId,
+                      diagnosisIssueId: formData.diagnosisIssueId,
+                      diagnosisNotes: formData.diagnosisNotes,
+                    })}
+                  </Text>
+                </View>
+              ) : null}
 
               <Text style={styles.inputLabel}>Asignar a *</Text>
               <TouchableOpacity
@@ -1114,6 +1224,99 @@ export default function WorkOrdersScreen() {
             <TouchableOpacity
               style={styles.closeSelectorButton}
               onPress={() => setShowMechanicSelector(false)}
+            >
+              <Text style={styles.closeSelectorButtonText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showDiagnosisCategorySelector}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowDiagnosisCategorySelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.selectorModal}>
+            <Text style={styles.selectorModalTitle}>Seleccionar sistema</Text>
+            <FlatList
+              data={VEHICLE_DIAGNOSTICS}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.selectorItem}
+                  onPress={() => {
+                    console.log('[WorkOrders] Selected diagnosis category', { id: item.id });
+                    setFormData((prev) => ({
+                      ...prev,
+                      diagnosisCategoryId: item.id,
+                      diagnosisIssueId: '',
+                    }));
+                    setShowDiagnosisCategorySelector(false);
+                  }}
+                  testID={`diagnosis-category-${item.id}`}
+                >
+                  <View style={styles.selectorItemContent}>
+                    <Text style={styles.selectorItemTitle}>{item.label}</Text>
+                    <Text style={styles.selectorItemSubtitle}>{item.issues.length} problemas comunes</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={styles.emptySelector}>
+                  <Text style={styles.emptySelectorText}>No hay categorías</Text>
+                </View>
+              }
+            />
+            <TouchableOpacity
+              style={styles.closeSelectorButton}
+              onPress={() => setShowDiagnosisCategorySelector(false)}
+              testID="close-diagnosis-category-selector"
+            >
+              <Text style={styles.closeSelectorButtonText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showDiagnosisIssueSelector}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowDiagnosisIssueSelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.selectorModal}>
+            <Text style={styles.selectorModalTitle}>Seleccionar problema</Text>
+            <FlatList
+              data={findDiagnosticCategory(formData.diagnosisCategoryId)?.issues ?? []}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.selectorItem}
+                  onPress={() => {
+                    console.log('[WorkOrders] Selected diagnosis issue', { id: item.id });
+                    setFormData((prev) => ({ ...prev, diagnosisIssueId: item.id }));
+                    setShowDiagnosisIssueSelector(false);
+                  }}
+                  testID={`diagnosis-issue-${item.id}`}
+                >
+                  <View style={styles.selectorItemContent}>
+                    <Text style={styles.selectorItemTitle}>{item.label}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={styles.emptySelector}>
+                  <Text style={styles.emptySelectorText}>No hay problemas para este sistema</Text>
+                </View>
+              }
+            />
+            <TouchableOpacity
+              style={styles.closeSelectorButton}
+              onPress={() => setShowDiagnosisIssueSelector(false)}
+              testID="close-diagnosis-issue-selector"
             >
               <Text style={styles.closeSelectorButtonText}>Cerrar</Text>
             </TouchableOpacity>
@@ -1519,6 +1722,44 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  notesInput: {
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
+  fieldHint: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  inputSubLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#6b7280',
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  selectorDisabled: {
+    opacity: 0.6,
+  },
+  diagnosisPreview: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  diagnosisPreviewLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#92400e',
+    marginBottom: 6,
+  },
+  diagnosisPreviewText: {
+    fontSize: 13,
+    color: '#78350f',
   },
   selector: {
     flexDirection: 'row',
