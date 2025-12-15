@@ -22,6 +22,11 @@ import {
   ShieldAlert,
   Trash2,
   ClipboardList,
+  BarChart3,
+  TrendingUp,
+  Clock,
+  Wrench,
+  Users,
 } from 'lucide-react-native';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
@@ -141,6 +146,8 @@ const splitIsoToInputs = (iso?: string) => {
 };
 const cloneItems = (items: WorkOrderItem[]) => items.map((item) => ({ ...item }));
 
+type StatsRange = '30d' | 'all';
+
 type WorkOrderFormState = {
   vehicleId: string;
   description: string;
@@ -198,6 +205,8 @@ export default function WorkOrdersScreen() {
   const canManageOrders = permissions.canManageWorkOrders;
   const viewOnlyAssigned = permissions.viewOnlyAssignedWorkOrders;
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statsExpanded, setStatsExpanded] = useState<boolean>(true);
+  const [statsRange, setStatsRange] = useState<StatsRange>('30d');
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showVehicleSelector, setShowVehicleSelector] = useState<boolean>(false);
@@ -256,6 +265,137 @@ export default function WorkOrdersScreen() {
     }
     return workOrders.filter((order) => order.assignedTo === user?.id);
   }, [viewOnlyAssigned, workOrders, user?.id]);
+
+  const statsOrders = useMemo(() => {
+    const base = scopedOrders;
+    if (statsRange === 'all') {
+      return base;
+    }
+    const now = Date.now();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const cutoff = now - thirtyDaysMs;
+    return base.filter((o) => {
+      const iso = o.checkInAt ?? o.createdAt;
+      const t = new Date(iso).getTime();
+      if (Number.isNaN(t)) {
+        return false;
+      }
+      return t >= cutoff;
+    });
+  }, [scopedOrders, statsRange]);
+
+  const stats = useMemo(() => {
+    const statusCounts: Record<WorkOrderStatus, number> = {
+      pending: 0,
+      in_progress: 0,
+      waiting_approval: 0,
+      approved: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+
+    let totalRevenue = 0;
+    let totalCompleted = 0;
+    let totalDurationMs = 0;
+
+    const mechanicLoad: Record<string, { mechanicId: string; activeCount: number; totalCount: number }> = {};
+
+    const categoryCounts: Record<string, { categoryId: string; count: number }> = {};
+    const issueCounts: Record<string, { key: string; categoryId: string; issueId: string; count: number }> = {};
+
+    const activeStatuses: WorkOrderStatus[] = ['pending', 'in_progress', 'waiting_approval', 'approved'];
+
+    statsOrders.forEach((o) => {
+      statusCounts[o.status] = (statusCounts[o.status] ?? 0) + 1;
+      totalRevenue += o.totalCost ?? 0;
+
+      if (o.assignedTo) {
+        const current = mechanicLoad[o.assignedTo] ?? {
+          mechanicId: o.assignedTo,
+          activeCount: 0,
+          totalCount: 0,
+        };
+        current.totalCount += 1;
+        if (activeStatuses.includes(o.status)) {
+          current.activeCount += 1;
+        }
+        mechanicLoad[o.assignedTo] = current;
+      }
+
+      if (o.diagnosisCategoryId) {
+        const current = categoryCounts[o.diagnosisCategoryId] ?? {
+          categoryId: o.diagnosisCategoryId,
+          count: 0,
+        };
+        current.count += 1;
+        categoryCounts[o.diagnosisCategoryId] = current;
+      }
+
+      if (o.diagnosisCategoryId && o.diagnosisIssueId) {
+        const key = `${o.diagnosisCategoryId}__${o.diagnosisIssueId}`;
+        const current = issueCounts[key] ?? {
+          key,
+          categoryId: o.diagnosisCategoryId,
+          issueId: o.diagnosisIssueId,
+          count: 0,
+        };
+        current.count += 1;
+        issueCounts[key] = current;
+      }
+
+      if (o.status === 'completed') {
+        const startIso = o.checkInAt ?? o.createdAt;
+        const endIso = o.completedAt;
+        const start = new Date(startIso).getTime();
+        const end = endIso ? new Date(endIso).getTime() : NaN;
+        if (!Number.isNaN(start) && !Number.isNaN(end) && end >= start) {
+          totalDurationMs += end - start;
+          totalCompleted += 1;
+        }
+      }
+    });
+
+    const totalOrders = statsOrders.length;
+
+    const kpis = {
+      totalOrders,
+      totalRevenue,
+      avgTicket: totalOrders ? totalRevenue / totalOrders : 0,
+      avgCompletionMs: totalCompleted ? totalDurationMs / totalCompleted : 0,
+    };
+
+    const topMechanics = Object.values(mechanicLoad)
+      .sort((a, b) => b.activeCount - a.activeCount || b.totalCount - a.totalCount)
+      .slice(0, 5);
+
+    const topCategories = Object.values(categoryCounts)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
+      .map((row) => ({
+        ...row,
+        label: findDiagnosticCategory(row.categoryId)?.label ?? row.categoryId,
+      }));
+
+    const topIssues = Object.values(issueCounts)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
+      .map((row) => ({
+        ...row,
+        label: findDiagnosticIssueLabel(row.categoryId, row.issueId).issueLabel || row.issueId,
+        categoryLabel: findDiagnosticIssueLabel(row.categoryId, row.issueId).categoryLabel || row.categoryId,
+      }));
+
+    const maxStatus = Math.max(1, ...Object.values(statusCounts));
+
+    return {
+      kpis,
+      statusCounts,
+      maxStatus,
+      topMechanics,
+      topCategories,
+      topIssues,
+    };
+  }, [statsOrders]);
 
   const sortedOrders = useMemo(() => {
     return [...scopedOrders].sort(
@@ -872,6 +1012,18 @@ export default function WorkOrdersScreen() {
     );
   };
 
+  const formatHoursFromMs = (ms: number) => {
+    if (!ms || Number.isNaN(ms)) {
+      return '—';
+    }
+    const hours = ms / (1000 * 60 * 60);
+    if (hours < 24) {
+      return `${hours.toFixed(1)}h`;
+    }
+    const days = hours / 24;
+    return `${days.toFixed(1)}d`;
+  };
+
   return (
     <View style={styles.wrapper}>
       <View style={styles.header}>
@@ -903,6 +1055,170 @@ export default function WorkOrdersScreen() {
           </Text>
         </View>
       )}
+
+      <View style={styles.statsWrap}>
+        <TouchableOpacity
+          style={styles.statsHeader}
+          onPress={() => setStatsExpanded((prev) => !prev)}
+          testID="work-orders-stats-toggle"
+        >
+          <View style={styles.statsHeaderLeft}>
+            <View style={styles.statsIconPill}>
+              <BarChart3 size={18} color="#0f172a" />
+            </View>
+            <View style={styles.statsHeaderTexts}>
+              <Text style={styles.statsTitle}>Estadísticas</Text>
+              <Text style={styles.statsSubtitle}>
+                {statsRange === '30d' ? 'Últimos 30 días' : 'Histórico'} · {stats.kpis.totalOrders} órdenes
+              </Text>
+            </View>
+          </View>
+          <ChevronDown size={18} color="#64748b" />
+        </TouchableOpacity>
+
+        {statsExpanded && (
+          <View style={styles.statsBody}>
+            <View style={styles.statsRangeRow}>
+              <TouchableOpacity
+                style={[styles.rangePill, statsRange === '30d' && styles.rangePillActive]}
+                onPress={() => setStatsRange('30d')}
+                testID="work-orders-stats-range-30d"
+              >
+                <Text style={[styles.rangePillText, statsRange === '30d' && styles.rangePillTextActive]}>30 días</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.rangePill, statsRange === 'all' && styles.rangePillActive]}
+                onPress={() => setStatsRange('all')}
+                testID="work-orders-stats-range-all"
+              >
+                <Text style={[styles.rangePillText, statsRange === 'all' && styles.rangePillTextActive]}>Histórico</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.kpiGrid}>
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: '#dbeafe' }]}>
+                  <TrendingUp size={18} color="#1d4ed8" />
+                </View>
+                <Text style={styles.kpiLabel}>Ingresos</Text>
+                <Text style={styles.kpiValue}>${stats.kpis.totalRevenue.toFixed(2)}</Text>
+                <Text style={styles.kpiHint}>Ticket prom. ${stats.kpis.avgTicket.toFixed(2)}</Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: '#dcfce7' }]}>
+                  <Wrench size={18} color="#166534" />
+                </View>
+                <Text style={styles.kpiLabel}>Completadas</Text>
+                <Text style={styles.kpiValue}>{stats.statusCounts.completed}</Text>
+                <Text style={styles.kpiHint}>Activas {stats.statusCounts.pending + stats.statusCounts.in_progress + stats.statusCounts.waiting_approval + stats.statusCounts.approved}</Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: '#fef9c3' }]}>
+                  <Clock size={18} color="#854d0e" />
+                </View>
+                <Text style={styles.kpiLabel}>Tiempo prom.</Text>
+                <Text style={styles.kpiValue}>{formatHoursFromMs(stats.kpis.avgCompletionMs)}</Text>
+                <Text style={styles.kpiHint}>De ingreso a completado</Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: '#e0e7ff' }]}>
+                  <Users size={18} color="#3730a3" />
+                </View>
+                <Text style={styles.kpiLabel}>Carga mecánicos</Text>
+                <Text style={styles.kpiValue}>{stats.topMechanics.reduce((sum, m) => sum + m.activeCount, 0)}</Text>
+                <Text style={styles.kpiHint}>OT activas (Top 5)</Text>
+              </View>
+            </View>
+
+            <View style={styles.statsSection}>
+              <Text style={styles.statsSectionTitle}>Estado de órdenes</Text>
+              {(
+                [
+                  { key: 'pending', label: 'Pendiente', color: '#f59e0b' },
+                  { key: 'in_progress', label: 'En progreso', color: '#3b82f6' },
+                  { key: 'waiting_approval', label: 'Esperando aprobación', color: '#8b5cf6' },
+                  { key: 'approved', label: 'Aprobado', color: '#10b981' },
+                  { key: 'completed', label: 'Completado', color: '#059669' },
+                  { key: 'cancelled', label: 'Cancelado', color: '#ef4444' },
+                ] as const
+              ).map((row) => {
+                const count = stats.statusCounts[row.key];
+                const widthPct = Math.round((count / stats.maxStatus) * 100);
+                return (
+                  <View key={row.key} style={styles.statusRow}>
+                    <View style={styles.statusRowTop}>
+                      <Text style={styles.statusRowLabel}>{row.label}</Text>
+                      <Text style={styles.statusRowValue}>{count}</Text>
+                    </View>
+                    <View style={styles.statusBarTrack}>
+                      <View style={[styles.statusBarFill, { width: `${widthPct}%`, backgroundColor: row.color }]} />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={styles.statsSection}>
+              <Text style={styles.statsSectionTitle}>Top sistemas (diagnóstico)</Text>
+              {stats.topCategories.length ? (
+                stats.topCategories.map((c) => (
+                  <View key={c.categoryId} style={styles.rankRow}>
+                    <Text style={styles.rankLabel} numberOfLines={1}>
+                      {c.label}
+                    </Text>
+                    <Text style={styles.rankValue}>{c.count}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.statsEmpty}>Aún no hay diagnósticos categorizados.</Text>
+              )}
+            </View>
+
+            <View style={styles.statsSection}>
+              <Text style={styles.statsSectionTitle}>Top problemas</Text>
+              {stats.topIssues.length ? (
+                stats.topIssues.map((i) => (
+                  <View key={i.key} style={styles.rankRow}>
+                    <View style={styles.rankLeft}>
+                      <Text style={styles.rankLabel} numberOfLines={1}>
+                        {i.label}
+                      </Text>
+                      <Text style={styles.rankSubLabel} numberOfLines={1}>
+                        {i.categoryLabel}
+                      </Text>
+                    </View>
+                    <Text style={styles.rankValue}>{i.count}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.statsEmpty}>Aún no hay problemas registrados.</Text>
+              )}
+            </View>
+
+            <View style={styles.statsSection}>
+              <Text style={styles.statsSectionTitle}>Carga de mecánicos (OT activas)</Text>
+              {stats.topMechanics.length ? (
+                stats.topMechanics.map((m) => {
+                  const mechanic = getUserById(m.mechanicId);
+                  return (
+                    <View key={m.mechanicId} style={styles.rankRow}>
+                      <Text style={styles.rankLabel} numberOfLines={1}>
+                        {mechanic?.name ?? m.mechanicId}
+                      </Text>
+                      <Text style={styles.rankValue}>{m.activeCount}</Text>
+                    </View>
+                  );
+                })
+              ) : (
+                <Text style={styles.statsEmpty}>No hay órdenes asignadas en este rango.</Text>
+              )}
+            </View>
+          </View>
+        )}
+      </View>
 
       <FlatList
         data={filteredOrders}
@@ -1910,6 +2226,185 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#6b7280',
+  },
+  statsWrap: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 18,
+    backgroundColor: '#0b1220',
+    overflow: 'hidden',
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  statsHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  statsHeaderTexts: {
+    flex: 1,
+    gap: 2,
+  },
+  statsIconPill: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsTitle: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '800' as const,
+    letterSpacing: 0.2,
+  },
+  statsSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  statsBody: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 14,
+  },
+  statsRangeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  rangePill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.22)',
+  },
+  rangePillActive: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#f8fafc',
+  },
+  rangePillText: {
+    color: '#cbd5e1',
+    fontWeight: '700' as const,
+    fontSize: 12,
+  },
+  rangePillTextActive: {
+    color: '#0b1220',
+  },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  kpiCard: {
+    width: '48%',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    borderRadius: 16,
+    padding: 12,
+    gap: 6,
+  },
+  kpiIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kpiLabel: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
+  kpiValue: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '900' as const,
+    letterSpacing: 0.2,
+  },
+  kpiHint: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  statsSection: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.16)',
+    borderRadius: 16,
+    padding: 12,
+    gap: 10,
+  },
+  statsSectionTitle: {
+    color: '#e2e8f0',
+    fontWeight: '800' as const,
+    fontSize: 13,
+    letterSpacing: 0.2,
+  },
+  statusRow: {
+    gap: 6,
+  },
+  statusRowTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statusRowLabel: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
+  statusRowValue: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '800' as const,
+  },
+  statusBarTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(148, 163, 184, 0.16)',
+    overflow: 'hidden',
+  },
+  statusBarFill: {
+    height: 8,
+    borderRadius: 999,
+  },
+  rankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  rankLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  rankLabel: {
+    flex: 1,
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
+  rankSubLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  rankValue: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '900' as const,
+  },
+  statsEmpty: {
+    color: '#94a3b8',
+    fontSize: 12,
   },
   breakdownButton: {
     flexDirection: 'row',
