@@ -1,16 +1,34 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Clock, CheckCircle2, AlertCircle, DollarSign, ShieldAlert } from 'lucide-react-native';
+import {
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  DollarSign,
+  ShieldAlert,
+  BarChart3,
+  TrendingUp,
+  Wrench,
+  Users,
+  ChevronDown,
+} from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
+import { WorkOrderStatus } from '@/types';
+import { findDiagnosticCategory } from '@/constants/vehicleDiagnostics';
+
+type StatsRange = '30d' | 'all';
 
 export default function DashboardScreen() {
   const { user, permissions } = useAuth();
   const { vehicles } = useVehicles();
   const { workOrders } = useWorkOrders();
   const router = useRouter();
+
+  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState<boolean>(true);
+  const [diagnosticsRange, setDiagnosticsRange] = useState<StatsRange>('30d');
 
   const scopedOrders = useMemo(() => {
     if (!permissions.viewOnlyAssignedWorkOrders) {
@@ -36,6 +54,78 @@ export default function DashboardScreen() {
       totalRevenue,
     };
   }, [scopedOrders]);
+
+  const statsOrders = useMemo(() => {
+    const base = scopedOrders;
+    if (diagnosticsRange === 'all') {
+      return base;
+    }
+    const now = Date.now();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const cutoff = now - thirtyDaysMs;
+    return base.filter((o) => {
+      const iso = o.checkInAt ?? o.createdAt;
+      const t = new Date(iso).getTime();
+      if (Number.isNaN(t)) {
+        return false;
+      }
+      return t >= cutoff;
+    });
+  }, [diagnosticsRange, scopedOrders]);
+
+  const diagnosticsStats = useMemo(() => {
+    const statusCounts: Record<WorkOrderStatus, number> = {
+      pending: 0,
+      in_progress: 0,
+      waiting_approval: 0,
+      approved: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+
+    let totalRevenue = 0;
+
+    const categoryCounts: Record<
+      string,
+      { categoryId: string; workOrdersCount: number; vehicles: Set<string> }
+    > = {};
+
+    statsOrders.forEach((o) => {
+      statusCounts[o.status] = (statusCounts[o.status] ?? 0) + 1;
+      totalRevenue += o.totalCost ?? 0;
+
+      if (o.diagnosisCategoryId) {
+        const current = categoryCounts[o.diagnosisCategoryId] ?? {
+          categoryId: o.diagnosisCategoryId,
+          workOrdersCount: 0,
+          vehicles: new Set<string>(),
+        };
+        current.workOrdersCount += 1;
+        current.vehicles.add(o.vehicleId);
+        categoryCounts[o.diagnosisCategoryId] = current;
+      }
+    });
+
+    const totalOrders = statsOrders.length;
+
+    const topCategories = Object.values(categoryCounts)
+      .sort((a, b) => b.workOrdersCount - a.workOrdersCount)
+      .slice(0, 8)
+      .map((row) => ({
+        categoryId: row.categoryId,
+        label: findDiagnosticCategory(row.categoryId)?.label ?? row.categoryId,
+        workOrdersCount: row.workOrdersCount,
+        vehiclesCount: row.vehicles.size,
+      }));
+
+    return {
+      totalOrders,
+      totalRevenue,
+      avgTicket: totalOrders ? totalRevenue / totalOrders : 0,
+      statusCounts,
+      topCategories,
+    };
+  }, [statsOrders]);
 
   const recentOrders = useMemo(() => {
     return [...scopedOrders]
@@ -119,6 +209,104 @@ export default function DashboardScreen() {
           <Text style={styles.statValue}>${stats.totalRevenue}</Text>
           <Text style={styles.statLabel}>Ingresos</Text>
         </View>
+      </View>
+
+      <View style={styles.diagnosticsWrap} testID="dashboard-diagnostics-stats">
+        <TouchableOpacity
+          style={styles.diagnosticsHeader}
+          onPress={() => setDiagnosticsExpanded((prev) => !prev)}
+          testID="dashboard-diagnostics-toggle"
+        >
+          <View style={styles.diagnosticsHeaderLeft}>
+            <View style={styles.diagnosticsIconPill}>
+              <BarChart3 size={18} color="#0f172a" />
+            </View>
+            <View style={styles.diagnosticsHeaderTexts}>
+              <Text style={styles.diagnosticsTitle}>Estadísticas (Diagnósticos)</Text>
+              <Text style={styles.diagnosticsSubtitle}>
+                {diagnosticsRange === '30d' ? 'Últimos 30 días' : 'Histórico'} · {diagnosticsStats.totalOrders} órdenes
+              </Text>
+            </View>
+          </View>
+          <ChevronDown size={18} color="#64748b" />
+        </TouchableOpacity>
+
+        {diagnosticsExpanded && (
+          <View style={styles.diagnosticsBody}>
+            <View style={styles.rangeRow}>
+              <TouchableOpacity
+                style={[styles.rangePill, diagnosticsRange === '30d' && styles.rangePillActive]}
+                onPress={() => setDiagnosticsRange('30d')}
+                testID="dashboard-diagnostics-range-30d"
+              >
+                <Text style={[styles.rangePillText, diagnosticsRange === '30d' && styles.rangePillTextActive]}>30 días</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.rangePill, diagnosticsRange === 'all' && styles.rangePillActive]}
+                onPress={() => setDiagnosticsRange('all')}
+                testID="dashboard-diagnostics-range-all"
+              >
+                <Text style={[styles.rangePillText, diagnosticsRange === 'all' && styles.rangePillTextActive]}>Histórico</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.kpiGrid}>
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: '#dbeafe' }]}>
+                  <TrendingUp size={18} color="#1d4ed8" />
+                </View>
+                <Text style={styles.kpiLabel}>Ingresos</Text>
+                <Text style={styles.kpiValue}>${diagnosticsStats.totalRevenue.toFixed(2)}</Text>
+                <Text style={styles.kpiHint}>Ticket prom. ${diagnosticsStats.avgTicket.toFixed(2)}</Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: '#dcfce7' }]}>
+                  <Wrench size={18} color="#166534" />
+                </View>
+                <Text style={styles.kpiLabel}>Completadas</Text>
+                <Text style={styles.kpiValue}>{diagnosticsStats.statusCounts.completed}</Text>
+                <Text style={styles.kpiHint}>
+                  Activas{' '}
+                  {diagnosticsStats.statusCounts.pending +
+                    diagnosticsStats.statusCounts.in_progress +
+                    diagnosticsStats.statusCounts.waiting_approval +
+                    diagnosticsStats.statusCounts.approved}
+                </Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <View style={[styles.kpiIcon, { backgroundColor: '#e0e7ff' }]}>
+                  <Users size={18} color="#3730a3" />
+                </View>
+                <Text style={styles.kpiLabel}>Órdenes</Text>
+                <Text style={styles.kpiValue}>{diagnosticsStats.totalOrders}</Text>
+                <Text style={styles.kpiHint}>En este rango</Text>
+              </View>
+            </View>
+
+            <View style={styles.diagnosticsSection}>
+              <Text style={styles.diagnosticsSectionTitle}>Vehículos por sistema</Text>
+              {diagnosticsStats.topCategories.length ? (
+                diagnosticsStats.topCategories.map((row) => (
+                  <View key={row.categoryId} style={styles.rankRow}>
+                    <View style={styles.rankLeft}>
+                      <Text style={styles.rankLabel} numberOfLines={1}>
+                        {row.label}
+                      </Text>
+                      <Text style={styles.rankSubLabel} numberOfLines={1}>
+                        {row.vehiclesCount} vehículos · {row.workOrdersCount} órdenes
+                      </Text>
+                    </View>
+                    <Text style={styles.rankValue}>{row.vehiclesCount}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.statsEmpty}>Aún no hay diagnósticos categorizados.</Text>
+              )}
+            </View>
+          </View>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -387,6 +575,151 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#059669',
+  },
+  diagnosticsWrap: {
+    marginBottom: 24,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#eef2ff',
+    overflow: 'hidden',
+  },
+  diagnosticsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#f8fafc',
+  },
+  diagnosticsHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  diagnosticsIconPill: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#e0e7ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  diagnosticsHeaderTexts: {
+    flex: 1,
+    gap: 2,
+  },
+  diagnosticsTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: '#0f172a',
+  },
+  diagnosticsSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  diagnosticsBody: {
+    padding: 16,
+    gap: 16,
+  },
+  rangeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  rangePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#f1f5f9',
+  },
+  rangePillActive: {
+    backgroundColor: '#0f172a',
+  },
+  rangePillText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#475569',
+  },
+  rangePillTextActive: {
+    color: '#fff',
+  },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  kpiCard: {
+    width: '48%',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    gap: 6,
+  },
+  kpiIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kpiLabel: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '700' as const,
+  },
+  kpiValue: {
+    fontSize: 20,
+    fontWeight: '800' as const,
+    color: '#0f172a',
+  },
+  kpiHint: {
+    fontSize: 11,
+    color: '#64748b',
+  },
+  diagnosticsSection: {
+    gap: 10,
+  },
+  diagnosticsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: '#0f172a',
+  },
+  rankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  rankLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  rankLabel: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#0f172a',
+  },
+  rankSubLabel: {
+    fontSize: 11,
+    color: '#64748b',
+  },
+  rankValue: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: '#0f172a',
+  },
+  statsEmpty: {
+    fontSize: 12,
+    color: '#94a3b8',
   },
   vehiclesCard: {
     backgroundColor: '#fff',
