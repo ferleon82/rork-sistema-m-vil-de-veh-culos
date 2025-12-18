@@ -491,8 +491,16 @@ export default function WorkOrdersScreen() {
       Alert.alert('Rol restringido', 'No puedes guardar cambios en órdenes');
       return;
     }
-    if (!formData.vehicleId || !formData.description) {
-      Alert.alert('Error', 'Por favor selecciona un vehículo y describe el trabajo');
+
+    const diagnosisSummary = buildDiagnosisSummary({
+      diagnosisCategoryId: formData.diagnosisCategoryId,
+      diagnosisIssueId: formData.diagnosisIssueId,
+      diagnosisNotes: formData.diagnosisNotes,
+    });
+    const descriptionFromDiagnosis = diagnosisSummary ?? '';
+
+    if (!formData.vehicleId || !descriptionFromDiagnosis) {
+      Alert.alert('Error', 'Por favor selecciona un vehículo y completa el diagnóstico del trabajo');
       return;
     }
     if (!formData.assignedTo) {
@@ -506,11 +514,6 @@ export default function WorkOrdersScreen() {
       return;
     }
 
-    const diagnosisSummary = buildDiagnosisSummary({
-      diagnosisCategoryId: formData.diagnosisCategoryId,
-      diagnosisIssueId: formData.diagnosisIssueId,
-      diagnosisNotes: formData.diagnosisNotes,
-    });
     const totalCost = formData.items.reduce((sum, item) => sum + item.total, 0);
 
     try {
@@ -518,7 +521,7 @@ export default function WorkOrdersScreen() {
         console.log('[WorkOrders] Updating order', { orderId: editingOrderId, totalCost });
         await updateWorkOrder(editingOrderId, {
           vehicleId: formData.vehicleId,
-          description: formData.description,
+          description: descriptionFromDiagnosis,
           diagnosisCategoryId: formData.diagnosisCategoryId || undefined,
           diagnosisIssueId: formData.diagnosisIssueId || undefined,
           diagnosisNotes: formData.diagnosisNotes.trim() ? formData.diagnosisNotes.trim() : undefined,
@@ -534,7 +537,7 @@ export default function WorkOrdersScreen() {
         console.log('[WorkOrders] Creating order', { vehicleId: formData.vehicleId, assignedTo: formData.assignedTo });
         await addWorkOrder({
           vehicleId: formData.vehicleId,
-          description: formData.description,
+          description: descriptionFromDiagnosis,
           diagnosisCategoryId: formData.diagnosisCategoryId || undefined,
           diagnosisIssueId: formData.diagnosisIssueId || undefined,
           diagnosisNotes: formData.diagnosisNotes.trim() ? formData.diagnosisNotes.trim() : undefined,
@@ -952,15 +955,16 @@ export default function WorkOrdersScreen() {
               </TouchableOpacity>
 
               <Text style={styles.inputLabel}>Descripción del Trabajo *</Text>
-              <TextInput
-                style={[styles.textInput, styles.textArea]}
-                value={formData.description}
-                onChangeText={(text) => setFormData({ ...formData, description: text })}
-                placeholder="Describe el trabajo a realizar"
-                placeholderTextColor="#9ca3af"
-                multiline
-                numberOfLines={3}
-              />
+              <View style={styles.workDescriptionCard} testID="work-description-card">
+                <Text style={styles.workDescriptionLabel}>Diagnóstico (Sistema + Problema + Notas):</Text>
+                <Text style={styles.workDescriptionValue} numberOfLines={4}>
+                  {buildDiagnosisSummary({
+                    diagnosisCategoryId: formData.diagnosisCategoryId,
+                    diagnosisIssueId: formData.diagnosisIssueId,
+                    diagnosisNotes: formData.diagnosisNotes,
+                  }) ?? 'Selecciona Sistema y Problema (y agrega notas si aplica).'}
+                </Text>
+              </View>
 
               <Text style={styles.inputLabel}>Diagnóstico (categorizado)</Text>
 
@@ -1741,6 +1745,25 @@ const styles = StyleSheet.create({
   },
   selectorDisabled: {
     opacity: 0.6,
+  },
+  workDescriptionCard: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  workDescriptionLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '600' as const,
+  },
+  workDescriptionValue: {
+    fontSize: 14,
+    color: '#111827',
+    lineHeight: 20,
+    fontWeight: '500' as const,
   },
   diagnosisPreview: {
     marginTop: 10,
