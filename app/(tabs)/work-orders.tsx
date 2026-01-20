@@ -634,16 +634,17 @@ export default function WorkOrdersScreen() {
     const totalCost = sanitizedItems.reduce((sum, item) => sum + item.total, 0);
 
     try {
-      console.log('[WorkOrders] Saving breakdown', { orderId: breakdownOrder.id, itemCount: sanitizedItems.length });
+      console.log('[WorkOrders] Saving breakdown', { orderId: breakdownOrder.id, itemCount: sanitizedItems.length, items: sanitizedItems });
       await updateWorkOrder(breakdownOrder.id, {
         items: sanitizedItems,
         totalCost,
       });
       Alert.alert('Éxito', 'Desglose guardado correctamente');
       handleCloseBreakdownModal();
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo guardar el desglose');
-      console.error(error);
+    } catch (error: any) {
+      const errorMessage = error?.message || error?.toString() || 'Error desconocido';
+      console.error('[WorkOrders] Error saving breakdown:', { error, errorMessage, orderId: breakdownOrder.id });
+      Alert.alert('Error', `No se pudo guardar el desglose: ${errorMessage}`);
     }
   };
 
