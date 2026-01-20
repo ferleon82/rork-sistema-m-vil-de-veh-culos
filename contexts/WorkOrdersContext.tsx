@@ -110,7 +110,8 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       
       if (error) {
         console.error('Error adding work order:', error);
-        throw error;
+        const errorMessage = error.message || error.details || 'Error desconocido al crear la orden';
+        throw new Error(errorMessage);
       }
       
       if (data) {
@@ -119,7 +120,10 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       }
     } catch (error) {
       console.error('Error adding work order:', error);
-      throw error;
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Error desconocido al crear la orden');
     }
   };
 
@@ -153,7 +157,8 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       
       if (error) {
         console.error('Error updating work order:', error);
-        throw error;
+        const errorMessage = error.message || error.details || 'Error desconocido al actualizar la orden';
+        throw new Error(errorMessage);
       }
       
       if (data) {
@@ -162,7 +167,10 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       }
     } catch (error) {
       console.error('Error updating work order:', error);
-      throw error;
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Error desconocido al actualizar la orden');
     }
   };
 
@@ -189,13 +197,17 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       
       if (error) {
         console.error('Error deleting work order:', error);
-        throw error;
+        const errorMessage = error.message || error.details || 'Error desconocido al eliminar la orden';
+        throw new Error(errorMessage);
       }
       
       setWorkOrders(workOrders.filter((wo) => wo.id !== id));
     } catch (error) {
       console.error('Error deleting work order:', error);
-      throw error;
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Error desconocido al eliminar la orden');
     }
   };
 

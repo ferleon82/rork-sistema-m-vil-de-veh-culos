@@ -369,9 +369,18 @@ export default function WorkOrdersScreen() {
       statusOptions.map((option) => ({
         text: option.label,
         onPress: async () => {
-          console.log('[WorkOrders] Changing status', { orderId, from: currentStatus, to: option.value });
-          await updateWorkOrderStatus(orderId, option.value);
-          Alert.alert('Éxito', 'Estado actualizado');
+          try {
+            console.log('[WorkOrders] Changing status', { orderId, from: currentStatus, to: option.value });
+            await updateWorkOrderStatus(orderId, option.value);
+            Alert.alert('Éxito', 'Estado actualizado');
+          } catch (error) {
+            let errorMessage = 'No se pudo cambiar el estado';
+            if (error instanceof Error) {
+              errorMessage = error.message;
+            }
+            console.error('[WorkOrders] Error changing status:', error);
+            Alert.alert('Error', errorMessage);
+          }
         },
       }))
     );
@@ -436,9 +445,18 @@ export default function WorkOrdersScreen() {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            console.log('[WorkOrders] Deleting order', { orderId: order.id });
-            await deleteWorkOrder(order.id);
-            Alert.alert('Éxito', 'Orden eliminada correctamente');
+            try {
+              console.log('[WorkOrders] Deleting order', { orderId: order.id });
+              await deleteWorkOrder(order.id);
+              Alert.alert('Éxito', 'Orden eliminada correctamente');
+            } catch (error) {
+              let errorMessage = 'No se pudo eliminar la orden';
+              if (error instanceof Error) {
+                errorMessage = error.message;
+              }
+              console.error('[WorkOrders] Error deleting order:', error);
+              Alert.alert('Error', errorMessage);
+            }
           },
         },
       ]
@@ -553,8 +571,12 @@ export default function WorkOrdersScreen() {
       }
       handleCloseModal();
     } catch (error) {
-      Alert.alert('Error', editingOrderId ? 'No se pudo actualizar la orden de trabajo' : 'No se pudo crear la orden de trabajo');
-      console.error(error);
+      let errorMessage = editingOrderId ? 'No se pudo actualizar la orden de trabajo' : 'No se pudo crear la orden de trabajo';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      console.error('[WorkOrders] Error submitting work order:', error);
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -641,10 +663,17 @@ export default function WorkOrdersScreen() {
       });
       Alert.alert('Éxito', 'Desglose guardado correctamente');
       handleCloseBreakdownModal();
-    } catch (error: any) {
-      const errorMessage = error?.message || error?.toString() || 'Error desconocido';
+    } catch (error) {
+      let errorMessage = 'Error desconocido';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        errorMessage = JSON.stringify(error);
+      }
       console.error('[WorkOrders] Error saving breakdown:', { error, errorMessage, orderId: breakdownOrder.id });
-      Alert.alert('Error', `No se pudo guardar el desglose: ${errorMessage}`);
+      Alert.alert('Error al guardar', errorMessage);
     }
   };
 
