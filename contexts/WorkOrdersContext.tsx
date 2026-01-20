@@ -129,6 +129,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
 
   const updateWorkOrder = async (id: string, updates: Partial<WorkOrder>) => {
     try {
+      console.log('[WorkOrdersContext] Updating work order:', { id, updates });
       const dbUpdate: DbWorkOrderUpdate = {};
       if (updates.vehicleId !== undefined) dbUpdate.vehicle_id = updates.vehicleId;
       if (updates.status !== undefined) dbUpdate.status = updates.status;
@@ -148,6 +149,8 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
       if (updates.images !== undefined) dbUpdate.images = updates.images || null;
       
+      console.log('[WorkOrdersContext] DB update payload:', dbUpdate);
+      
       const { data, error } = await supabase
         .from('work_orders')
         .update(dbUpdate)
@@ -156,21 +159,25 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
         .single();
       
       if (error) {
-        console.error('Error updating work order:', error);
+        console.error('[WorkOrdersContext] Supabase error:', JSON.stringify(error, null, 2));
         const errorMessage = error.message || error.details || error.hint || 'Error desconocido al actualizar la orden';
         throw new Error(errorMessage);
       }
       
       if (data) {
+        console.log('[WorkOrdersContext] Successfully updated work order');
         const updatedWorkOrder = mapDbWorkOrderToWorkOrder(data);
         setWorkOrders(workOrders.map((wo) => (wo.id === id ? updatedWorkOrder : wo)));
       }
     } catch (error) {
-      console.error('Error updating work order:', error);
+      console.error('[WorkOrdersContext] Catch block error:', error);
       if (error instanceof Error) {
+        console.error('[WorkOrdersContext] Error message:', error.message);
         throw error;
       }
-      throw new Error('Error desconocido al actualizar la orden');
+      const errorStr = typeof error === 'object' ? JSON.stringify(error) : String(error);
+      console.error('[WorkOrdersContext] Non-Error object:', errorStr);
+      throw new Error(`Error al actualizar la orden: ${errorStr}`);
     }
   };
 
