@@ -149,7 +149,8 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
       if (updates.images !== undefined) dbUpdate.images = updates.images || null;
       
-      console.log('[WorkOrdersContext] DB update payload:', dbUpdate);
+      console.log('[WorkOrdersContext] DB update payload:', JSON.stringify(dbUpdate, null, 2));
+      console.log('[WorkOrdersContext] Updating work order with ID:', id);
       
       const { data, error } = await supabase
         .from('work_orders')
@@ -159,24 +160,58 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
         .single();
       
       if (error) {
-        console.error('[WorkOrdersContext] Supabase error:', JSON.stringify(error, null, 2));
-        const errorMessage = error.message || error.details || error.hint || 'Error desconocido al actualizar la orden';
+        console.error('[WorkOrdersContext] ===== SUPABASE ERROR DETAILS =====');
+        console.error('[WorkOrdersContext] Error object:', error);
+        console.error('[WorkOrdersContext] Error message:', error.message);
+        console.error('[WorkOrdersContext] Error details:', error.details);
+        console.error('[WorkOrdersContext] Error hint:', error.hint);
+        console.error('[WorkOrdersContext] Error code:', error.code);
+        console.error('[WorkOrdersContext] Full error JSON:', JSON.stringify(error, null, 2));
+        console.error('[WorkOrdersContext] =====================================');
+        
+        const errorParts = [];
+        if (error.message) errorParts.push(error.message);
+        if (error.details) errorParts.push(`Detalles: ${error.details}`);
+        if (error.hint) errorParts.push(`Sugerencia: ${error.hint}`);
+        if (error.code) errorParts.push(`Código: ${error.code}`);
+        
+        const errorMessage = errorParts.length > 0 
+          ? errorParts.join(' | ') 
+          : 'Error desconocido al actualizar la orden';
+        
         throw new Error(errorMessage);
       }
       
       if (data) {
-        console.log('[WorkOrdersContext] Successfully updated work order');
+        console.log('[WorkOrdersContext] Successfully updated work order:', data);
         const updatedWorkOrder = mapDbWorkOrderToWorkOrder(data);
         setWorkOrders(workOrders.map((wo) => (wo.id === id ? updatedWorkOrder : wo)));
       }
     } catch (error) {
-      console.error('[WorkOrdersContext] Catch block error:', error);
+      console.error('[WorkOrdersContext] ===== CATCH BLOCK ERROR =====');
+      console.error('[WorkOrdersContext] Error type:', typeof error);
+      console.error('[WorkOrdersContext] Error instanceof Error:', error instanceof Error);
+      console.error('[WorkOrdersContext] Error object:', error);
+      
       if (error instanceof Error) {
-        console.error('[WorkOrdersContext] Error message:', error.message);
+        console.error('[WorkOrdersContext] Error.message:', error.message);
+        console.error('[WorkOrdersContext] Error.stack:', error.stack);
         throw error;
       }
-      const errorStr = typeof error === 'object' ? JSON.stringify(error) : String(error);
-      console.error('[WorkOrdersContext] Non-Error object:', errorStr);
+      
+      let errorStr = 'Error desconocido';
+      try {
+        if (error && typeof error === 'object') {
+          errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
+        } else {
+          errorStr = String(error);
+        }
+      } catch (stringifyError) {
+        errorStr = 'Error al serializar el error';
+      }
+      
+      console.error('[WorkOrdersContext] Stringified error:', errorStr);
+      console.error('[WorkOrdersContext] ================================');
       throw new Error(`Error al actualizar la orden: ${errorStr}`);
     }
   };
