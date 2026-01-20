@@ -8,7 +8,7 @@ import {
   Settings,
   Factory,
 } from "lucide-react-native";
-import React, { useMemo } from "react";
+import React from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
 import type { AppTabName } from "@/contexts/AuthContext";

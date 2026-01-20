@@ -104,7 +104,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       
       const { data, error } = await supabase
         .from('work_orders')
-        .insert(dbInsert)
+        .insert(dbInsert as any)
         .select()
         .single();
       
