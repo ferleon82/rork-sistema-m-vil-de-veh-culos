@@ -110,7 +110,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       
       if (error) {
         console.error('Error adding work order:', error);
-        const errorMessage = error.message || error.details || 'Error desconocido al crear la orden';
+        const errorMessage = error.message || error.details || error.hint || 'Error desconocido al crear la orden';
         throw new Error(errorMessage);
       }
       
@@ -157,7 +157,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       
       if (error) {
         console.error('Error updating work order:', error);
-        const errorMessage = error.message || error.details || 'Error desconocido al actualizar la orden';
+        const errorMessage = error.message || error.details || error.hint || 'Error desconocido al actualizar la orden';
         throw new Error(errorMessage);
       }
       
@@ -197,7 +197,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       
       if (error) {
         console.error('Error deleting work order:', error);
-        const errorMessage = error.message || error.details || 'Error desconocido al eliminar la orden';
+        const errorMessage = error.message || error.details || error.hint || 'Error desconocido al eliminar la orden';
         throw new Error(errorMessage);
       }
       

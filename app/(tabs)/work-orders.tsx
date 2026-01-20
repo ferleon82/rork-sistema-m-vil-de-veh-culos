@@ -377,6 +377,12 @@ export default function WorkOrdersScreen() {
             let errorMessage = 'No se pudo cambiar el estado';
             if (error instanceof Error) {
               errorMessage = error.message;
+            } else if (error && typeof error === 'object' && 'message' in error) {
+              errorMessage = String((error as any).message);
+            } else if (typeof error === 'string') {
+              errorMessage = error;
+            } else {
+              errorMessage = `Error al cambiar estado: ${JSON.stringify(error)}`;
             }
             console.error('[WorkOrders] Error changing status:', error);
             Alert.alert('Error', errorMessage);
@@ -453,6 +459,12 @@ export default function WorkOrdersScreen() {
               let errorMessage = 'No se pudo eliminar la orden';
               if (error instanceof Error) {
                 errorMessage = error.message;
+              } else if (error && typeof error === 'object' && 'message' in error) {
+                errorMessage = String((error as any).message);
+              } else if (typeof error === 'string') {
+                errorMessage = error;
+              } else {
+                errorMessage = `Error al eliminar: ${JSON.stringify(error)}`;
               }
               console.error('[WorkOrders] Error deleting order:', error);
               Alert.alert('Error', errorMessage);
@@ -574,6 +586,12 @@ export default function WorkOrdersScreen() {
       let errorMessage = editingOrderId ? 'No se pudo actualizar la orden de trabajo' : 'No se pudo crear la orden de trabajo';
       if (error instanceof Error) {
         errorMessage = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String((error as any).message);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else {
+        errorMessage = `${errorMessage}: ${JSON.stringify(error)}`;
       }
       console.error('[WorkOrders] Error submitting work order:', error);
       Alert.alert('Error', errorMessage);
@@ -664,13 +682,24 @@ export default function WorkOrdersScreen() {
       Alert.alert('Éxito', 'Desglose guardado correctamente');
       handleCloseBreakdownModal();
     } catch (error) {
-      let errorMessage = 'Error desconocido';
+      let errorMessage = 'Error desconocido al guardar el desglose';
       if (error instanceof Error) {
         errorMessage = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String((error as any).message);
       } else if (typeof error === 'string') {
         errorMessage = error;
       } else if (error && typeof error === 'object') {
-        errorMessage = JSON.stringify(error);
+        try {
+          const errorObj = error as any;
+          if (errorObj.details) {
+            errorMessage = `${errorObj.message || 'Error'}: ${errorObj.details}`;
+          } else {
+            errorMessage = JSON.stringify(error);
+          }
+        } catch {
+          errorMessage = 'Error al guardar el desglose';
+        }
       }
       console.error('[WorkOrders] Error saving breakdown:', { error, errorMessage, orderId: breakdownOrder.id });
       Alert.alert('Error al guardar', errorMessage);
