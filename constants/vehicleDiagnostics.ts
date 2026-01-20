@@ -22,6 +22,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'abs_warning', label: 'Luz ABS encendida / falla ABS' },
       { id: 'parking_brake', label: 'Freno de mano no sostiene / desajuste' },
       { id: 'brake_caliper', label: 'Caliper pegado / freno recalentado' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -37,6 +38,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'engine_power_loss', label: 'Pérdida de potencia' },
       { id: 'engine_smoke', label: 'Humo excesivo (azul/negro/blanco)' },
       { id: 'engine_noise', label: 'Ruidos (cascabeleo/golpeteo)' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -49,6 +51,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'water_pump', label: 'Bomba de agua con falla' },
       { id: 'fan_not_working', label: 'Ventilador no enciende' },
       { id: 'coolant_low', label: 'Refrigerante bajo' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -61,6 +64,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'trans_noise', label: 'Ruidos (zumbido/ronquido)' },
       { id: 'clutch_worn', label: 'Embrague desgastado (manual)' },
       { id: 'trans_warning', label: 'Testigo de transmisión / modo emergencia' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -73,6 +77,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'suspension_noise', label: 'Golpeteo al pasar baches' },
       { id: 'vehicle_pulls', label: 'Vehículo se va hacia un lado' },
       { id: 'uneven_tire_wear', label: 'Desgaste irregular de llantas' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -85,6 +90,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'alignment', label: 'Alineación fuera de especificación' },
       { id: 'steering_vibration', label: 'Vibración en el volante' },
       { id: 'tie_rods', label: 'Terminales / barras con juego' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -97,6 +103,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'fuse', label: 'Fusible quemado / circuito abierto' },
       { id: 'wiring', label: 'Cableado en mal estado / falso contacto' },
       { id: 'parasitic_draw', label: 'Consumo parasitario (descarga)' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -108,6 +115,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'turn_signal', label: 'Direccional intermitente / no funciona' },
       { id: 'fog_lights', label: 'Neblineros no funcionan' },
       { id: 'wiring_lighting', label: 'Conector / cableado de luces con falla' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -120,6 +128,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'ac_leak', label: 'Fuga de gas refrigerante' },
       { id: 'cabin_filter', label: 'Filtro de cabina sucio' },
       { id: 'blower', label: 'Ventilador interno no funciona' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -132,6 +141,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'fuel_leak', label: 'Fuga de combustible' },
       { id: 'high_consumption', label: 'Consumo elevado' },
       { id: 'fuel_smell', label: 'Olor a combustible' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -143,6 +153,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'o2_sensor', label: 'Sensor de oxígeno con falla' },
       { id: 'smoke_emissions', label: 'Emisiones fuera de norma / humo' },
       { id: 'muffler_noise', label: 'Escape ruidoso / silenciador dañado' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -155,6 +166,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'rim_damage', label: 'Rin doblado / dañado' },
       { id: 'wheel_bearing', label: 'Rodamiento de rueda ruidoso' },
       { id: 'tire_pressure', label: 'Presión incorrecta / sensor TPMS' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -167,6 +179,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'timing_belt', label: 'Correa de distribución / tiempo' },
       { id: 'fluid_topup', label: 'Reposición de fluidos' },
       { id: 'general_inspection', label: 'Revisión general' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -178,6 +191,7 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'dashboard_lights', label: 'Testigos / tablero con falla' },
       { id: 'audio', label: 'Audio / radio no funciona' },
       { id: 'seat_belts', label: 'Cinturones / anclajes con falla' },
+      { id: 'other', label: 'Otros' },
     ],
   },
   {
@@ -190,6 +204,14 @@ export const VEHICLE_DIAGNOSTICS: VehicleDiagnosticCategory[] = [
       { id: 'abs_sensors', label: 'Sensor ABS / velocidad de rueda con falla' },
       { id: 'tpms', label: 'TPMS / sensor de presión con falla' },
       { id: 'scan_codes', label: 'Escaneo de códigos / diagnóstico OBD' },
+      { id: 'other', label: 'Otros' },
+    ],
+  },
+  {
+    id: 'other',
+    label: 'Otros',
+    issues: [
+      { id: 'other', label: 'Otros' },
     ],
   },
 ];
