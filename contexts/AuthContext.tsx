@@ -133,21 +133,35 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   };
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      console.log('Attempting login for email:', email);
+      console.log('🔐 Attempting login for email:', email);
       
       const trimmedEmail = email.trim().toLowerCase();
       const trimmedPassword = password.trim();
       
-      console.log('Querying users table...');
+      console.log('📡 Testing Supabase connection...');
       const { data: allUsers, error: listError } = await supabase
         .from('users')
-        .select('email, role');
+        .select('email, role, name');
       
-      console.log('Available users in database:', allUsers);
       if (listError) {
-        console.error('Error listing users:', listError);
+        console.error('❌ Error connecting to Supabase:', listError);
+        return { 
+          success: false, 
+          error: `Error de conexión: ${listError.message}\n\nVerifica que Supabase esté configurado correctamente.` 
+        };
+      }
+      
+      console.log('✅ Supabase connected. Users found:', allUsers?.length || 0);
+      console.log('👥 Available users:', allUsers);
+      
+      if (!allUsers || allUsers.length === 0) {
+        console.error('❌ No users found in database');
+        return { 
+          success: false, 
+          error: 'La base de datos está vacía.\n\nDebes ejecutar el script SQL de migración en Supabase para crear los usuarios de prueba.' 
+        };
       }
       
       const { data, error } = await supabase
@@ -157,39 +171,46 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         .eq('password', trimmedPassword)
         .single();
       
-      console.log('Login query result:', { data, error });
+      console.log('🔍 Login query result:', { found: !!data, error: error?.message });
       
       if (error) {
-        console.error('Supabase error:', error);
+        console.error('❌ Supabase query error:', error);
         
         const { data: userCheck } = await supabase
           .from('users')
-          .select('email, role')
+          .select('email, role, name')
           .eq('email', trimmedEmail)
           .single();
         
         if (userCheck) {
-          console.log('User found but password mismatch');
+          console.log('⚠️ User found but password mismatch');
+          return { success: false, error: 'Contraseña incorrecta' };
         } else {
-          console.log('User not found with email:', trimmedEmail);
+          console.log('⚠️ User not found with email:', trimmedEmail);
+          const availableEmails = allUsers.map(u => u.email).join(', ');
+          return { 
+            success: false, 
+            error: `Usuario no encontrado.\n\nUsuarios disponibles:\n${availableEmails}` 
+          };
         }
-        
-        return false;
       }
       
       if (data) {
-        console.log('Login successful for user:', data.email);
+        console.log('✅ Login successful for user:', data.email, '- Role:', data.role);
         const foundUser = mapDbUserToUser(data);
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(foundUser));
         setUser(foundUser);
-        return true;
+        return { success: true };
       }
       
-      console.log('No data returned from login query');
-      return false;
+      console.log('❌ No data returned from login query');
+      return { success: false, error: 'Credenciales incorrectas' };
     } catch (error) {
-      console.error('Error during login:', error);
-      return false;
+      console.error('💥 Unexpected error during login:', error);
+      return { 
+        success: false, 
+        error: `Error inesperado: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      };
     }
   };
 

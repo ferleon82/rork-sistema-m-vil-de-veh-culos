@@ -28,12 +28,13 @@ export default function LoginScreen() {
 
     setIsLoading(true);
     try {
-      const success = await login(email, password);
-      if (!success) {
-        Alert.alert('Error', 'Credenciales incorrectas. Intenta con:\nadmin@taller.com / admin123\ntecnico@taller.com / admin123');
+      const result = await login(email, password);
+      if (!result.success) {
+        Alert.alert('Error de autenticación', result.error || 'Credenciales incorrectas');
       }
-    } catch {
-      Alert.alert('Error', 'Ocurrió un error al iniciar sesión');
+    } catch (error) {
+      Alert.alert('Error', 'Ocurrió un error inesperado al iniciar sesión');
+      console.error('Login error:', error);
     } finally {
       setIsLoading(false);
     }
