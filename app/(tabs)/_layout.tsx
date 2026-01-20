@@ -60,10 +60,6 @@ const TAB_CONFIG: readonly TabConfig[] = [
 export default function TabLayout() {
   const { user, isLoading, permissions } = useAuth();
 
-  const visibleTabs = useMemo(() => {
-    return TAB_CONFIG.filter((tab) => permissions.accessibleTabs.includes(tab.name));
-  }, [permissions.accessibleTabs]);
-
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -104,14 +100,16 @@ export default function TabLayout() {
         },
       }}
     >
-      {visibleTabs.map((tab) => {
+      {TAB_CONFIG.map((tab) => {
         const IconComponent = tab.icon;
+        const isAccessible = permissions.accessibleTabs.includes(tab.name);
         return (
           <Tabs.Screen
             key={tab.name}
             name={tab.name}
             options={{
               title: tab.title,
+              href: isAccessible ? undefined : null,
               tabBarIcon: ({ color, size }) => (
                 <IconComponent size={size} color={color} />
               ),
