@@ -135,20 +135,57 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
+      console.log('Attempting login for email:', email);
+      
+      const trimmedEmail = email.trim().toLowerCase();
+      const trimmedPassword = password.trim();
+      
+      console.log('Querying users table...');
+      const { data: allUsers, error: listError } = await supabase
+        .from('users')
+        .select('email, role');
+      
+      console.log('Available users in database:', allUsers);
+      if (listError) {
+        console.error('Error listing users:', listError);
+      }
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('email', email)
-        .eq('password', password)
+        .eq('email', trimmedEmail)
+        .eq('password', trimmedPassword)
         .single();
       
-      if (data && !error) {
+      console.log('Login query result:', { data, error });
+      
+      if (error) {
+        console.error('Supabase error:', error);
+        
+        const { data: userCheck } = await supabase
+          .from('users')
+          .select('email, role')
+          .eq('email', trimmedEmail)
+          .single();
+        
+        if (userCheck) {
+          console.log('User found but password mismatch');
+        } else {
+          console.log('User not found with email:', trimmedEmail);
+        }
+        
+        return false;
+      }
+      
+      if (data) {
+        console.log('Login successful for user:', data.email);
         const foundUser = mapDbUserToUser(data);
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(foundUser));
         setUser(foundUser);
         return true;
       }
       
+      console.log('No data returned from login query');
       return false;
     } catch (error) {
       console.error('Error during login:', error);
