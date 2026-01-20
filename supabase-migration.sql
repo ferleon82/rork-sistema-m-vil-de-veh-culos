@@ -2,29 +2,29 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create ENUM types
-DO $ BEGIN
+DO $$ BEGIN
     CREATE TYPE user_role AS ENUM ('admin', 'technician', 'mechanic');
 EXCEPTION
     WHEN duplicate_object THEN null;
-END $;
+END $$;
 
-DO $ BEGIN
+DO $$ BEGIN
     CREATE TYPE work_order_status AS ENUM ('pending', 'in_progress', 'waiting_approval', 'approved', 'completed', 'cancelled');
 EXCEPTION
     WHEN duplicate_object THEN null;
-END $;
+END $$;
 
-DO $ BEGIN
+DO $$ BEGIN
     CREATE TYPE work_order_priority AS ENUM ('low', 'medium', 'high');
 EXCEPTION
     WHEN duplicate_object THEN null;
-END $;
+END $$;
 
-DO $ BEGIN
+DO $$ BEGIN
     CREATE TYPE notification_type AS ENUM ('status_update', 'budget_sent', 'budget_approved', 'work_completed');
 EXCEPTION
     WHEN duplicate_object THEN null;
-END $;
+END $$;
 
 -- Create clients table
 CREATE TABLE IF NOT EXISTS clients (
