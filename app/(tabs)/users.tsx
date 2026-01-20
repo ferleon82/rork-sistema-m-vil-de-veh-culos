@@ -38,7 +38,7 @@ type UserFormData = {
 };
 
 export default function UsersScreen() {
-  const { isAdmin, permissions } = useAuth();
+  const { isAdmin, permissions, user: currentUser } = useAuth();
   const assignableRoles = permissions.assignableRoles;
   const defaultRoleForCreation: UserRole = assignableRoles.includes('mechanic')
     ? 'mechanic'
@@ -247,8 +247,12 @@ export default function UsersScreen() {
     }
   };
 
+  const roleFilteredUsers = permissions.canManageUsers && currentUser?.role === 'technician'
+    ? users.filter((u) => u.id === currentUser.id)
+    : users;
+
   const filteredUsers = searchQuery
-    ? users.filter((u) => {
+    ? roleFilteredUsers.filter((u) => {
         const country = getCountryByCode(u.countryCode);
         return (
           u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -258,7 +262,7 @@ export default function UsersScreen() {
           (country && country.name.toLowerCase().includes(searchQuery.toLowerCase()))
         );
       })
-    : users;
+    : roleFilteredUsers;
 
   const renderUser = ({ item }: { item: User }) => {
     const country = getCountryByCode(item.countryCode);
