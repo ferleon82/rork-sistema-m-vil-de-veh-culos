@@ -1,37 +1,38 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState } from 'react';
 import { Workshop } from '@/types';
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database';
 
-const STORAGE_KEY = '@workshops';
+type DbWorkshop = Database['public']['Tables']['workshops']['Row'];
+type DbWorkshopInsert = Database['public']['Tables']['workshops']['Insert'];
+type DbWorkshopUpdate = Database['public']['Tables']['workshops']['Update'];
 
-const INITIAL_WORKSHOPS: Workshop[] = [
-  {
-    id: 'w1',
-    name: 'Mecánica Central',
-    ownerId: '2',
-    countryCode: 'EC',
-    phone: '+593970123456',
-    address: 'Av. De los Shyris y Portugal, Quito',
-    email: 'contacto@mecanicacentral.com',
-    notes: 'Especialistas en transmisiones automáticas y diagnóstico electrónico.',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'w2',
-    name: 'Torque Plus Garage',
-    ownerId: '2',
-    countryCode: 'EC',
-    phone: '+593978904567',
-    address: 'Av. León Febres-Cordero, Guayaquil',
-    email: 'hola@torqueplus.com',
-    notes: 'Atención premium para flotas corporativas.',
-    createdAt: new Date().toISOString(),
-  },
-];
+const mapDbWorkshopToWorkshop = (dbWorkshop: DbWorkshop): Workshop => ({
+  id: dbWorkshop.id,
+  name: dbWorkshop.name,
+  ownerId: dbWorkshop.owner_id,
+  countryCode: dbWorkshop.country_code,
+  phone: dbWorkshop.phone || undefined,
+  address: dbWorkshop.address || undefined,
+  email: dbWorkshop.email || undefined,
+  notes: dbWorkshop.notes || undefined,
+  createdAt: dbWorkshop.created_at,
+});
+
+const mapWorkshopToDbInsert = (workshop: Omit<Workshop, 'id' | 'createdAt'>): DbWorkshopInsert => ({
+  name: workshop.name,
+  owner_id: workshop.ownerId,
+  country_code: workshop.countryCode,
+  phone: workshop.phone || null,
+  address: workshop.address || null,
+  email: workshop.email || null,
+  notes: workshop.notes || null,
+});
 
 export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
-  const [workshops, setWorkshops] = useState<Workshop[]>(INITIAL_WORKSHOPS);
+  const [workshops, setWorkshops] = useState<Workshop[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     loadWorkshops();
@@ -39,47 +40,104 @@ export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
 
   const loadWorkshops = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: Workshop[] = JSON.parse(stored);
-        setWorkshops(parsed);
-      } else {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_WORKSHOPS));
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('workshops')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error loading workshops:', error);
+        return;
+      }
+      
+      if (data) {
+        setWorkshops(data.map(mapDbWorkshopToWorkshop));
       }
     } catch (error) {
       console.error('Error loading workshops:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const persist = async (next: Workshop[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      setWorkshops(next);
-    } catch (error) {
-      console.error('Error saving workshops:', error);
-    }
-  };
+
 
   const addWorkshop = async (data: Omit<Workshop, 'id' | 'createdAt'>) => {
-    const newWorkshop: Workshop = {
-      ...data,
-      id: `w${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
-    await persist([...workshops, newWorkshop]);
-    return newWorkshop;
+    try {
+      const dbInsert = mapWorkshopToDbInsert(data);
+      const { data: result, error } = await supabase
+        .from('workshops')
+        .insert(dbInsert)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error adding workshop:', error);
+        throw error;
+      }
+      
+      if (result) {
+        const newWorkshop = mapDbWorkshopToWorkshop(result);
+        setWorkshops([newWorkshop, ...workshops]);
+        return newWorkshop;
+      }
+    } catch (error) {
+      console.error('Error adding workshop:', error);
+      throw error;
+    }
   };
 
   const updateWorkshop = async (id: string, updates: Partial<Workshop>) => {
-    const next = workshops.map((workshop) =>
-      workshop.id === id ? { ...workshop, ...updates } : workshop
-    );
-    await persist(next);
+    try {
+      const dbUpdate: DbWorkshopUpdate = {};
+      if (updates.name !== undefined) dbUpdate.name = updates.name;
+      if (updates.ownerId !== undefined) dbUpdate.owner_id = updates.ownerId;
+      if (updates.countryCode !== undefined) dbUpdate.country_code = updates.countryCode;
+      if (updates.phone !== undefined) dbUpdate.phone = updates.phone || null;
+      if (updates.address !== undefined) dbUpdate.address = updates.address || null;
+      if (updates.email !== undefined) dbUpdate.email = updates.email || null;
+      if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
+      
+      const { data, error } = await supabase
+        .from('workshops')
+        .update(dbUpdate)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating workshop:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const updatedWorkshop = mapDbWorkshopToWorkshop(data);
+        setWorkshops(workshops.map((w) => (w.id === id ? updatedWorkshop : w)));
+      }
+    } catch (error) {
+      console.error('Error updating workshop:', error);
+      throw error;
+    }
   };
 
   const deleteWorkshop = async (id: string) => {
-    const next = workshops.filter((workshop) => workshop.id !== id);
-    await persist(next);
+    try {
+      const { error } = await supabase
+        .from('workshops')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting workshop:', error);
+        throw error;
+      }
+      
+      setWorkshops(workshops.filter((w) => w.id !== id));
+    } catch (error) {
+      console.error('Error deleting workshop:', error);
+      throw error;
+    }
   };
 
   const getWorkshopsByOwner = (ownerId: string) =>
@@ -87,6 +145,8 @@ export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
 
   return {
     workshops,
+    isLoading,
+    loadWorkshops,
     addWorkshop,
     updateWorkshop,
     deleteWorkshop,

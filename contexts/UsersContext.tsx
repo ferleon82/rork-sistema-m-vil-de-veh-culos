@@ -1,45 +1,37 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect } from 'react';
 import { User, UserRole } from '@/types';
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database';
 
-const STORAGE_KEY = '@users';
-const DEFAULT_COUNTRY_CODE = 'EC';
+type DbUser = Database['public']['Tables']['users']['Row'];
+type DbUserInsert = Database['public']['Tables']['users']['Insert'];
+type DbUserUpdate = Database['public']['Tables']['users']['Update'];
 
-const DEFAULT_PASSWORD = 'admin123';
+const mapDbUserToUser = (dbUser: DbUser): User => ({
+  id: dbUser.id,
+  email: dbUser.email,
+  name: dbUser.name,
+  role: dbUser.role,
+  countryCode: dbUser.country_code,
+  phone: dbUser.phone || undefined,
+  password: dbUser.password,
+  clientId: dbUser.client_id || undefined,
+});
 
-const INITIAL_USERS: User[] = [
-  {
-    id: '1',
-    email: 'admin@taller.com',
-    name: 'Administrador',
-    role: 'admin',
-    countryCode: 'EC',
-    phone: '+59312345678',
-    password: DEFAULT_PASSWORD,
-  },
-  {
-    id: '2',
-    email: 'tecnico@taller.com',
-    name: 'Técnico Juan',
-    role: 'technician',
-    countryCode: 'EC',
-    phone: '+59387654321',
-    password: DEFAULT_PASSWORD,
-  },
-  {
-    id: '3',
-    email: 'mecanico@taller.com',
-    name: 'Mecánico Pedro',
-    role: 'mechanic',
-    countryCode: 'EC',
-    phone: '+59399887766',
-    password: DEFAULT_PASSWORD,
-  },
-];
+const mapUserToDbInsert = (user: Omit<User, 'id'>): DbUserInsert => ({
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  country_code: user.countryCode,
+  phone: user.phone || null,
+  password: user.password,
+  client_id: user.clientId || null,
+});
 
 export const [UsersProvider, useUsers] = createContextHook(() => {
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     loadUsers();
@@ -47,59 +39,104 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
 
   const loadUsers = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsedUsers: User[] = JSON.parse(stored);
-        setUsers(
-          parsedUsers.map((user) => ({
-            ...user,
-            countryCode: user.countryCode || DEFAULT_COUNTRY_CODE,
-            password: user.password || DEFAULT_PASSWORD,
-          }))
-        );
-      } else {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_USERS));
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error loading users:', error);
+        return;
+      }
+      
+      if (data) {
+        setUsers(data.map(mapDbUserToUser));
       }
     } catch (error) {
       console.error('Error loading users:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const saveUsers = async (newUsers: User[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newUsers));
-      setUsers(newUsers);
-    } catch (error) {
-      console.error('Error saving users:', error);
-    }
-  };
+
 
   const addUser = async (user: Omit<User, 'id'>) => {
-    const newUser: User = {
-      ...user,
-      id: Date.now().toString(),
-      password: user.password || DEFAULT_PASSWORD,
-    };
-    await saveUsers([...users, newUser]);
-    return newUser;
+    try {
+      const dbInsert = mapUserToDbInsert(user);
+      const { data, error } = await supabase
+        .from('users')
+        .insert(dbInsert)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error adding user:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const newUser = mapDbUserToUser(data);
+        setUsers([...users, newUser]);
+        return newUser;
+      }
+    } catch (error) {
+      console.error('Error adding user:', error);
+      throw error;
+    }
   };
 
   const updateUser = async (id: string, updates: Partial<User>) => {
-    const updated = users.map((u) =>
-      u.id === id
-        ? {
-            ...u,
-            ...updates,
-            password: updates.password || u.password,
-          }
-        : u
-    );
-    await saveUsers(updated);
+    try {
+      const dbUpdate: DbUserUpdate = {};
+      if (updates.email !== undefined) dbUpdate.email = updates.email;
+      if (updates.name !== undefined) dbUpdate.name = updates.name;
+      if (updates.role !== undefined) dbUpdate.role = updates.role;
+      if (updates.countryCode !== undefined) dbUpdate.country_code = updates.countryCode;
+      if (updates.phone !== undefined) dbUpdate.phone = updates.phone || null;
+      if (updates.password !== undefined) dbUpdate.password = updates.password;
+      if (updates.clientId !== undefined) dbUpdate.client_id = updates.clientId || null;
+      
+      const { data, error } = await supabase
+        .from('users')
+        .update(dbUpdate)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating user:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const updatedUser = mapDbUserToUser(data);
+        setUsers(users.map((u) => (u.id === id ? updatedUser : u)));
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
   };
 
   const deleteUser = async (id: string) => {
-    const filtered = users.filter((u) => u.id !== id);
-    await saveUsers(filtered);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting user:', error);
+        throw error;
+      }
+      
+      setUsers(users.filter((u) => u.id !== id));
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
   };
 
   const getUserById = (id: string) => {
@@ -124,6 +161,7 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
 
   return {
     users,
+    isLoading,
     loadUsers,
     addUser,
     updateUser,

@@ -1,103 +1,169 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { WorkOrder, WorkOrderStatus } from '@/types';
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database';
 
-const STORAGE_KEY = '@work_orders';
+type DbWorkOrder = Database['public']['Tables']['work_orders']['Row'];
+type DbWorkOrderInsert = Database['public']['Tables']['work_orders']['Insert'];
+type DbWorkOrderUpdate = Database['public']['Tables']['work_orders']['Update'];
 
-const DEMO_WORK_ORDERS: WorkOrder[] = [
-  {
-    id: '1',
-    code: 'OT-2025-001',
-    vehicleId: '1',
-    status: 'in_progress',
-    priority: 'high',
-    description: 'Mantenimiento preventivo 45,000 km',
-    diagnosisCategoryId: 'maintenance',
-    diagnosisIssueId: 'general_inspection',
-    diagnosis: 'Mantenimiento preventivo: Revisión general',
-    items: [
-      { id: '1', description: 'Aceite sintético 5W-30', quantity: 4, unitPrice: 15, total: 60 },
-      { id: '2', description: 'Filtro de aceite', quantity: 1, unitPrice: 12, total: 12 },
-      { id: '3', description: 'Filtro de aire', quantity: 1, unitPrice: 18, total: 18 },
-      { id: '4', description: 'Mano de obra', quantity: 1, unitPrice: 50, total: 50 },
-    ],
-    totalCost: 140,
-    createdBy: '1',
-    assignedTo: '2',
-    checkInAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    startedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    estimatedCompletionDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: '2',
-    code: 'OT-2025-002',
-    vehicleId: '2',
-    status: 'waiting_approval',
-    priority: 'medium',
-    description: 'Revisión de frenos',
-    diagnosisCategoryId: 'brakes',
-    diagnosisIssueId: 'brake_pads_worn',
-    diagnosisNotes: 'Desgaste ~80%, se recomienda reemplazo',
-    diagnosis: 'Sistema de frenos: Pastillas de freno desgastadas — Desgaste ~80%, se recomienda reemplazo',
-    items: [
-      { id: '1', description: 'Pastillas de freno delanteras', quantity: 1, unitPrice: 85, total: 85 },
-      { id: '2', description: 'Discos de freno', quantity: 2, unitPrice: 60, total: 120 },
-      { id: '3', description: 'Mano de obra', quantity: 1, unitPrice: 70, total: 70 },
-    ],
-    totalCost: 275,
-    createdBy: '2',
-    assignedTo: '2',
-    checkInAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    startedAt: new Date().toISOString(),
-  },
-];
+const mapDbWorkOrderToWorkOrder = (dbWorkOrder: DbWorkOrder): WorkOrder => ({
+  id: dbWorkOrder.id,
+  code: dbWorkOrder.code,
+  vehicleId: dbWorkOrder.vehicle_id,
+  status: dbWorkOrder.status,
+  priority: dbWorkOrder.priority,
+  description: dbWorkOrder.description,
+  diagnosis: dbWorkOrder.diagnosis || undefined,
+  diagnosisCategoryId: dbWorkOrder.diagnosis_category_id || undefined,
+  diagnosisIssueId: dbWorkOrder.diagnosis_issue_id || undefined,
+  diagnosisNotes: dbWorkOrder.diagnosis_notes || undefined,
+  items: dbWorkOrder.items as any,
+  totalCost: Number(dbWorkOrder.total_cost),
+  createdBy: dbWorkOrder.created_by,
+  assignedTo: dbWorkOrder.assigned_to || undefined,
+  checkInAt: dbWorkOrder.check_in_at,
+  startedAt: dbWorkOrder.started_at || undefined,
+  completedAt: dbWorkOrder.completed_at || undefined,
+  estimatedCompletionDate: dbWorkOrder.estimated_completion_date || undefined,
+  notes: dbWorkOrder.notes || undefined,
+  images: dbWorkOrder.images || undefined,
+  createdAt: dbWorkOrder.created_at,
+});
+
+const mapWorkOrderToDbInsert = (workOrder: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'totalCost'>): Omit<DbWorkOrderInsert, 'code' | 'total_cost'> => ({
+  vehicle_id: workOrder.vehicleId,
+  status: workOrder.status,
+  priority: workOrder.priority,
+  description: workOrder.description,
+  diagnosis: workOrder.diagnosis || null,
+  diagnosis_category_id: workOrder.diagnosisCategoryId || null,
+  diagnosis_issue_id: workOrder.diagnosisIssueId || null,
+  diagnosis_notes: workOrder.diagnosisNotes || null,
+  items: workOrder.items as any,
+  created_by: workOrder.createdBy,
+  assigned_to: workOrder.assignedTo || null,
+  check_in_at: workOrder.checkInAt,
+  started_at: workOrder.startedAt || null,
+  completed_at: workOrder.completedAt || null,
+  estimated_completion_date: workOrder.estimatedCompletionDate || null,
+  notes: workOrder.notes || null,
+  images: workOrder.images || null,
+});
 
 export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(DEMO_WORK_ORDERS);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    loadWorkOrders();
+  }, []);
 
   const loadWorkOrders = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setWorkOrders(JSON.parse(stored));
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error loading work orders:', error);
+        return;
+      }
+      
+      if (data) {
+        setWorkOrders(data.map(mapDbWorkOrderToWorkOrder));
       }
     } catch (error) {
       console.error('Error loading work orders:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const saveWorkOrders = async (newWorkOrders: WorkOrder[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newWorkOrders));
-      setWorkOrders(newWorkOrders);
-    } catch (error) {
-      console.error('Error saving work orders:', error);
-    }
-  };
+
 
   const addWorkOrder = async (workOrder: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'totalCost'>) => {
-    const totalCost = workOrder.items.reduce((sum, item) => sum + item.total, 0);
-    const orderNumber = workOrders.length + 1;
-    const code = `OT-${new Date().getFullYear()}-${orderNumber.toString().padStart(3, '0')}`;
-    
-    const newWorkOrder: WorkOrder = {
-      ...workOrder,
-      id: Date.now().toString(),
-      code,
-      totalCost,
-      createdAt: new Date().toISOString(),
-    };
-    await saveWorkOrders([...workOrders, newWorkOrder]);
+    try {
+      const totalCost = workOrder.items.reduce((sum, item) => sum + item.total, 0);
+      
+      const { count } = await supabase
+        .from('work_orders')
+        .select('*', { count: 'exact', head: true });
+      
+      const orderNumber = (count || 0) + 1;
+      const code = `OT-${new Date().getFullYear()}-${orderNumber.toString().padStart(3, '0')}`;
+      
+      const dbInsert = {
+        ...mapWorkOrderToDbInsert(workOrder),
+        code,
+        total_cost: totalCost,
+      };
+      
+      const { data, error } = await supabase
+        .from('work_orders')
+        .insert(dbInsert)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error adding work order:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const newWorkOrder = mapDbWorkOrderToWorkOrder(data);
+        setWorkOrders([newWorkOrder, ...workOrders]);
+      }
+    } catch (error) {
+      console.error('Error adding work order:', error);
+      throw error;
+    }
   };
 
   const updateWorkOrder = async (id: string, updates: Partial<WorkOrder>) => {
-    const updated = workOrders.map((wo) =>
-      wo.id === id ? { ...wo, ...updates } : wo
-    );
-    await saveWorkOrders(updated);
+    try {
+      const dbUpdate: DbWorkOrderUpdate = {};
+      if (updates.vehicleId !== undefined) dbUpdate.vehicle_id = updates.vehicleId;
+      if (updates.status !== undefined) dbUpdate.status = updates.status;
+      if (updates.priority !== undefined) dbUpdate.priority = updates.priority;
+      if (updates.description !== undefined) dbUpdate.description = updates.description;
+      if (updates.diagnosis !== undefined) dbUpdate.diagnosis = updates.diagnosis || null;
+      if (updates.diagnosisCategoryId !== undefined) dbUpdate.diagnosis_category_id = updates.diagnosisCategoryId || null;
+      if (updates.diagnosisIssueId !== undefined) dbUpdate.diagnosis_issue_id = updates.diagnosisIssueId || null;
+      if (updates.diagnosisNotes !== undefined) dbUpdate.diagnosis_notes = updates.diagnosisNotes || null;
+      if (updates.items !== undefined) dbUpdate.items = updates.items as any;
+      if (updates.totalCost !== undefined) dbUpdate.total_cost = updates.totalCost;
+      if (updates.assignedTo !== undefined) dbUpdate.assigned_to = updates.assignedTo || null;
+      if (updates.checkInAt !== undefined) dbUpdate.check_in_at = updates.checkInAt;
+      if (updates.startedAt !== undefined) dbUpdate.started_at = updates.startedAt || null;
+      if (updates.completedAt !== undefined) dbUpdate.completed_at = updates.completedAt || null;
+      if (updates.estimatedCompletionDate !== undefined) dbUpdate.estimated_completion_date = updates.estimatedCompletionDate || null;
+      if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
+      if (updates.images !== undefined) dbUpdate.images = updates.images || null;
+      
+      const { data, error } = await supabase
+        .from('work_orders')
+        .update(dbUpdate)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating work order:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const updatedWorkOrder = mapDbWorkOrderToWorkOrder(data);
+        setWorkOrders(workOrders.map((wo) => (wo.id === id ? updatedWorkOrder : wo)));
+      }
+    } catch (error) {
+      console.error('Error updating work order:', error);
+      throw error;
+    }
   };
 
   const updateWorkOrderStatus = async (id: string, status: WorkOrderStatus) => {
@@ -115,8 +181,22 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
   };
 
   const deleteWorkOrder = async (id: string) => {
-    const filtered = workOrders.filter((wo) => wo.id !== id);
-    await saveWorkOrders(filtered);
+    try {
+      const { error } = await supabase
+        .from('work_orders')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting work order:', error);
+        throw error;
+      }
+      
+      setWorkOrders(workOrders.filter((wo) => wo.id !== id));
+    } catch (error) {
+      console.error('Error deleting work order:', error);
+      throw error;
+    }
   };
 
   const getWorkOrderById = (id: string) => {
@@ -133,6 +213,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
 
   return {
     workOrders,
+    isLoading,
     loadWorkOrders,
     addWorkOrder,
     updateWorkOrder,

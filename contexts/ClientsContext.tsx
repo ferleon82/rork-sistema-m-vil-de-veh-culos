@@ -1,77 +1,143 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Client } from '@/types';
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database';
 
-const STORAGE_KEY = '@clients';
+type DbClient = Database['public']['Tables']['clients']['Row'];
+type DbClientInsert = Database['public']['Tables']['clients']['Insert'];
+type DbClientUpdate = Database['public']['Tables']['clients']['Update'];
 
-const DEMO_CLIENTS: Client[] = [
-  {
-    id: '1',
-    name: 'Carlos García',
-    phone: '+593991234567',
-    countryCode: 'EC',
-    email: 'carlos@example.com',
-    address: 'Av. Amazonas N35-140, Quito',
-    documentNumber: '01234567-8',
-    notes: 'Cliente frecuente, prefiere pagos en efectivo',
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: '2',
-    name: 'María López',
-    phone: '+593987654321',
-    countryCode: 'EC',
-    email: 'maria@example.com',
-    address: 'Cumbayá, Calle de los Establos, Quito',
-    documentNumber: '09876543-2',
-    createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
+const mapDbClientToClient = (dbClient: DbClient): Client => ({
+  id: dbClient.id,
+  name: dbClient.name,
+  phone: dbClient.phone,
+  countryCode: dbClient.country_code,
+  email: dbClient.email || undefined,
+  address: dbClient.address || undefined,
+  documentNumber: dbClient.document_number || undefined,
+  notes: dbClient.notes || undefined,
+  createdAt: dbClient.created_at,
+});
+
+const mapClientToDbInsert = (client: Omit<Client, 'id' | 'createdAt'>): DbClientInsert => ({
+  name: client.name,
+  phone: client.phone,
+  country_code: client.countryCode,
+  email: client.email || null,
+  address: client.address || null,
+  document_number: client.documentNumber || null,
+  notes: client.notes || null,
+});
 
 export const [ClientsProvider, useClients] = createContextHook(() => {
-  const [clients, setClients] = useState<Client[]>(DEMO_CLIENTS);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    loadClients();
+  }, []);
 
   const loadClients = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setClients(JSON.parse(stored));
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error loading clients:', error);
+        return;
+      }
+      
+      if (data) {
+        setClients(data.map(mapDbClientToClient));
       }
     } catch (error) {
       console.error('Error loading clients:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const saveClients = async (newClients: Client[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newClients));
-      setClients(newClients);
-    } catch (error) {
-      console.error('Error saving clients:', error);
-    }
-  };
+
 
   const addClient = async (client: Omit<Client, 'id' | 'createdAt'>) => {
-    const newClient: Client = {
-      ...client,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-    };
-    await saveClients([...clients, newClient]);
-    return newClient;
+    try {
+      const dbInsert = mapClientToDbInsert(client);
+      const { data, error } = await supabase
+        .from('clients')
+        .insert(dbInsert)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error adding client:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const newClient = mapDbClientToClient(data);
+        setClients([newClient, ...clients]);
+        return newClient;
+      }
+    } catch (error) {
+      console.error('Error adding client:', error);
+      throw error;
+    }
   };
 
   const updateClient = async (id: string, updates: Partial<Client>) => {
-    const updated = clients.map((c) =>
-      c.id === id ? { ...c, ...updates } : c
-    );
-    await saveClients(updated);
+    try {
+      const dbUpdate: DbClientUpdate = {};
+      if (updates.name !== undefined) dbUpdate.name = updates.name;
+      if (updates.phone !== undefined) dbUpdate.phone = updates.phone;
+      if (updates.countryCode !== undefined) dbUpdate.country_code = updates.countryCode;
+      if (updates.email !== undefined) dbUpdate.email = updates.email || null;
+      if (updates.address !== undefined) dbUpdate.address = updates.address || null;
+      if (updates.documentNumber !== undefined) dbUpdate.document_number = updates.documentNumber || null;
+      if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .update(dbUpdate)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating client:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const updatedClient = mapDbClientToClient(data);
+        setClients(clients.map((c) => (c.id === id ? updatedClient : c)));
+      }
+    } catch (error) {
+      console.error('Error updating client:', error);
+      throw error;
+    }
   };
 
   const deleteClient = async (id: string) => {
-    const filtered = clients.filter((c) => c.id !== id);
-    await saveClients(filtered);
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting client:', error);
+        throw error;
+      }
+      
+      setClients(clients.filter((c) => c.id !== id));
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      throw error;
+    }
   };
 
   const getClientById = (id: string) => {
@@ -91,6 +157,7 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
 
   return {
     clients,
+    isLoading,
     loadClients,
     addClient,
     updateClient,

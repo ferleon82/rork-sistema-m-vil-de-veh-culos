@@ -1,83 +1,155 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Vehicle } from '@/types';
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database';
 
-const STORAGE_KEY = '@vehicles';
+type DbVehicle = Database['public']['Tables']['vehicles']['Row'];
+type DbVehicleInsert = Database['public']['Tables']['vehicles']['Insert'];
+type DbVehicleUpdate = Database['public']['Tables']['vehicles']['Update'];
 
-const DEMO_VEHICLES: Vehicle[] = [
-  {
-    id: '1',
-    vin: 'JH4KA7532MC123456',
-    plate: 'ABC-1234',
-    brand: 'Toyota',
-    model: 'Corolla',
-    year: 2020,
-    currentKm: 45000,
-    clientId: '1',
-    ownerName: 'Carlos García',
-    ownerPhone: '+50312345678',
-    ownerEmail: 'carlos@example.com',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    vin: 'WBADT43452G123789',
-    plate: 'XYZ-5678',
-    brand: 'Honda',
-    model: 'Civic',
-    year: 2019,
-    currentKm: 62000,
-    clientId: '2',
-    ownerName: 'María López',
-    ownerPhone: '+50387654321',
-    ownerEmail: 'maria@example.com',
-    createdAt: new Date().toISOString(),
-  },
-];
+const mapDbVehicleToVehicle = (dbVehicle: DbVehicle): Vehicle => ({
+  id: dbVehicle.id,
+  vin: dbVehicle.vin,
+  plate: dbVehicle.plate,
+  brand: dbVehicle.brand,
+  model: dbVehicle.model,
+  year: dbVehicle.year,
+  currentKm: dbVehicle.current_km,
+  clientId: dbVehicle.client_id,
+  ownerName: dbVehicle.owner_name,
+  ownerPhone: dbVehicle.owner_phone,
+  ownerEmail: dbVehicle.owner_email || undefined,
+  photoUrl: dbVehicle.photo_url || undefined,
+  createdAt: dbVehicle.created_at,
+});
+
+const mapVehicleToDbInsert = (vehicle: Omit<Vehicle, 'id' | 'createdAt'>): DbVehicleInsert => ({
+  vin: vehicle.vin,
+  plate: vehicle.plate,
+  brand: vehicle.brand,
+  model: vehicle.model,
+  year: vehicle.year,
+  current_km: vehicle.currentKm,
+  client_id: vehicle.clientId,
+  owner_name: vehicle.ownerName,
+  owner_phone: vehicle.ownerPhone,
+  owner_email: vehicle.ownerEmail || null,
+  photo_url: vehicle.photoUrl || null,
+});
 
 export const [VehiclesProvider, useVehicles] = createContextHook(() => {
-  const [vehicles, setVehicles] = useState<Vehicle[]>(DEMO_VEHICLES);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    loadVehicles();
+  }, []);
 
   const loadVehicles = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setVehicles(JSON.parse(stored));
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error loading vehicles:', error);
+        return;
+      }
+      
+      if (data) {
+        setVehicles(data.map(mapDbVehicleToVehicle));
       }
     } catch (error) {
       console.error('Error loading vehicles:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const saveVehicles = async (newVehicles: Vehicle[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newVehicles));
-      setVehicles(newVehicles);
-    } catch (error) {
-      console.error('Error saving vehicles:', error);
-    }
-  };
+
 
   const addVehicle = async (vehicle: Omit<Vehicle, 'id' | 'createdAt'>) => {
-    const newVehicle: Vehicle = {
-      ...vehicle,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-    };
-    await saveVehicles([...vehicles, newVehicle]);
+    try {
+      const dbInsert = mapVehicleToDbInsert(vehicle);
+      const { data, error } = await supabase
+        .from('vehicles')
+        .insert(dbInsert)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error adding vehicle:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const newVehicle = mapDbVehicleToVehicle(data);
+        setVehicles([newVehicle, ...vehicles]);
+        return newVehicle;
+      }
+    } catch (error) {
+      console.error('Error adding vehicle:', error);
+      throw error;
+    }
   };
 
   const updateVehicle = async (id: string, updates: Partial<Vehicle>) => {
-    const updated = vehicles.map((v) =>
-      v.id === id ? { ...v, ...updates } : v
-    );
-    await saveVehicles(updated);
+    try {
+      const dbUpdate: DbVehicleUpdate = {};
+      if (updates.vin !== undefined) dbUpdate.vin = updates.vin;
+      if (updates.plate !== undefined) dbUpdate.plate = updates.plate;
+      if (updates.brand !== undefined) dbUpdate.brand = updates.brand;
+      if (updates.model !== undefined) dbUpdate.model = updates.model;
+      if (updates.year !== undefined) dbUpdate.year = updates.year;
+      if (updates.currentKm !== undefined) dbUpdate.current_km = updates.currentKm;
+      if (updates.clientId !== undefined) dbUpdate.client_id = updates.clientId;
+      if (updates.ownerName !== undefined) dbUpdate.owner_name = updates.ownerName;
+      if (updates.ownerPhone !== undefined) dbUpdate.owner_phone = updates.ownerPhone;
+      if (updates.ownerEmail !== undefined) dbUpdate.owner_email = updates.ownerEmail || null;
+      if (updates.photoUrl !== undefined) dbUpdate.photo_url = updates.photoUrl || null;
+      
+      const { data, error } = await supabase
+        .from('vehicles')
+        .update(dbUpdate)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Error updating vehicle:', error);
+        throw error;
+      }
+      
+      if (data) {
+        const updatedVehicle = mapDbVehicleToVehicle(data);
+        setVehicles(vehicles.map((v) => (v.id === id ? updatedVehicle : v)));
+      }
+    } catch (error) {
+      console.error('Error updating vehicle:', error);
+      throw error;
+    }
   };
 
   const deleteVehicle = async (id: string) => {
-    const filtered = vehicles.filter((v) => v.id !== id);
-    await saveVehicles(filtered);
+    try {
+      const { error } = await supabase
+        .from('vehicles')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error deleting vehicle:', error);
+        throw error;
+      }
+      
+      setVehicles(vehicles.filter((v) => v.id !== id));
+    } catch (error) {
+      console.error('Error deleting vehicle:', error);
+      throw error;
+    }
   };
 
   const getVehicleById = (id: string) => {
@@ -86,6 +158,7 @@ export const [VehiclesProvider, useVehicles] = createContextHook(() => {
 
   return {
     vehicles,
+    isLoading,
     loadVehicles,
     addVehicle,
     updateVehicle,

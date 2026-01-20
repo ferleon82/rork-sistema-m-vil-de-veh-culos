@@ -3,41 +3,23 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { User, UserRole } from '@/types';
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/database';
 
 const STORAGE_KEY = '@auth_user';
-const USERS_STORAGE_KEY = '@users';
 
-const DEFAULT_PASSWORD = 'admin123';
+type DbUser = Database['public']['Tables']['users']['Row'];
 
-const INITIAL_USERS: User[] = [
-  {
-    id: '1',
-    email: 'admin@taller.com',
-    name: 'Administrador',
-    role: 'admin',
-    countryCode: 'EC',
-    phone: '+59312345678',
-    password: DEFAULT_PASSWORD,
-  },
-  {
-    id: '2',
-    email: 'tecnico@taller.com',
-    name: 'Técnico Juan',
-    role: 'technician',
-    countryCode: 'EC',
-    phone: '+59387654321',
-    password: DEFAULT_PASSWORD,
-  },
-  {
-    id: '3',
-    email: 'mecanico@taller.com',
-    name: 'Mecánico Pedro',
-    role: 'mechanic',
-    countryCode: 'EC',
-    phone: '+59399887766',
-    password: DEFAULT_PASSWORD,
-  },
-];
+const mapDbUserToUser = (dbUser: DbUser): User => ({
+  id: dbUser.id,
+  email: dbUser.email,
+  name: dbUser.name,
+  role: dbUser.role,
+  countryCode: dbUser.country_code,
+  phone: dbUser.phone || undefined,
+  password: dbUser.password,
+  clientId: dbUser.client_id || undefined,
+});
 
 type AppTabName =
   | 'index'
@@ -129,7 +111,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setUser(JSON.parse(stored));
+        const cachedUser = JSON.parse(stored);
+        setUser(cachedUser);
+        
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', cachedUser.id)
+          .single();
+        
+        if (data && !error) {
+          const freshUser = mapDbUserToUser(data);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(freshUser));
+          setUser(freshUser);
+        }
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -140,12 +135,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const storedUsers = await AsyncStorage.getItem(USERS_STORAGE_KEY);
-      const users: User[] = storedUsers ? JSON.parse(storedUsers) : INITIAL_USERS;
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .eq('password', password)
+        .single();
       
-      const foundUser = users.find((u) => u.email === email);
-      
-      if (foundUser && foundUser.password === password) {
+      if (data && !error) {
+        const foundUser = mapDbUserToUser(data);
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(foundUser));
         setUser(foundUser);
         return true;
