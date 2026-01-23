@@ -17,6 +17,7 @@ const mapDbUserToUser = (dbUser: DbUser): User => ({
   phone: dbUser.phone || undefined,
   password: dbUser.password,
   clientId: dbUser.client_id || undefined,
+  workshopId: dbUser.workshop_id || undefined,
 });
 
 const mapUserToDbInsert = (user: Omit<User, 'id'>): DbUserInsert => ({
@@ -27,6 +28,7 @@ const mapUserToDbInsert = (user: Omit<User, 'id'>): DbUserInsert => ({
   phone: user.phone || null,
   password: user.password,
   client_id: user.clientId || null,
+  workshop_id: user.workshopId || null,
 });
 
 export const [UsersProvider, useUsers] = createContextHook(() => {
@@ -97,6 +99,7 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
       if (updates.phone !== undefined) dbUpdate.phone = updates.phone || null;
       if (updates.password !== undefined) dbUpdate.password = updates.password;
       if (updates.clientId !== undefined) dbUpdate.client_id = updates.clientId || null;
+      if (updates.workshopId !== undefined) dbUpdate.workshop_id = updates.workshopId || null;
       
       const { data, error } = await supabase
         .from('users')
@@ -151,6 +154,10 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
     return users.filter((u) => u.role === 'mechanic');
   };
 
+  const getUsersByWorkshop = (workshopId: string) => {
+    return users.filter((u) => u.workshopId === workshopId);
+  };
+
   const authenticateUser = (email: string, password: string) => {
     const foundUser = users.find((u) => u.email === email);
     if (foundUser && foundUser.password === password) {
@@ -170,5 +177,6 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
     getUsersByRole,
     getMechanics,
     authenticateUser,
+    getUsersByWorkshop,
   };
 });

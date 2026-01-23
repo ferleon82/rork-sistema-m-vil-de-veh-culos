@@ -12,17 +12,21 @@ import {
 } from 'react-native';
 import { useClients } from '@/contexts/ClientsContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkshops } from '@/contexts/WorkshopsContext';
 import { Client } from '@/types';
 import { LATIN_AMERICAN_COUNTRIES, getCountryByCode } from '@/constants/countries';
-import { Plus, Search, User, Phone, Mail, MapPin, FileText, X, Trash2, Edit, Globe, Shield } from 'lucide-react-native';
+import { Plus, Search, User, Phone, Mail, MapPin, FileText, X, Trash2, Edit, Globe, Shield, Building2 } from 'lucide-react-native';
 
 export default function ClientsScreen() {
-  const { clients, addClient, updateClient, deleteClient, searchClients } = useClients();
-  const { permissions } = useAuth();
+  const { clients, addClient, updateClient, deleteClient, searchClients, getClientsByWorkshop } = useClients();
+  const { permissions, isAdmin } = useAuth();
+  const { workshops } = useWorkshops();
   const canManageClients = permissions.canManageClients;
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>('all');
   const [modalVisible, setModalVisible] = useState(false);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showWorkshopPicker, setShowWorkshopPicker] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -32,9 +36,20 @@ export default function ClientsScreen() {
     address: '',
     documentNumber: '',
     notes: '',
+    workshopId: undefined as string | undefined,
   });
 
-  const filteredClients = searchQuery ? searchClients(searchQuery) : clients;
+  let displayClients = clients;
+  if (isAdmin && selectedWorkshopId !== 'all') {
+    displayClients = getClientsByWorkshop(selectedWorkshopId);
+  }
+  const filteredClients = searchQuery ? displayClients.filter(
+    (c) =>
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.phone.includes(searchQuery) ||
+      c.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.documentNumber?.includes(searchQuery)
+  ) : displayClients;
 
   if (!canManageClients) {
     return (
@@ -57,6 +72,7 @@ export default function ClientsScreen() {
       address: '',
       documentNumber: '',
       notes: '',
+      workshopId: undefined,
     });
     setEditingClient(null);
   };
@@ -76,6 +92,7 @@ export default function ClientsScreen() {
       address: client.address || '',
       documentNumber: client.documentNumber || '',
       notes: client.notes || '',
+      workshopId: client.workshopId,
     });
     setModalVisible(true);
   };
@@ -96,6 +113,7 @@ export default function ClientsScreen() {
           address: formData.address || undefined,
           documentNumber: formData.documentNumber || undefined,
           notes: formData.notes || undefined,
+          workshopId: formData.workshopId,
         });
         Alert.alert('Éxito', 'Cliente actualizado correctamente');
       } else {
@@ -107,6 +125,7 @@ export default function ClientsScreen() {
           address: formData.address || undefined,
           documentNumber: formData.documentNumber || undefined,
           notes: formData.notes || undefined,
+          workshopId: formData.workshopId,
         });
         Alert.alert('Éxito', 'Cliente creado correctamente');
       }
@@ -136,9 +155,11 @@ export default function ClientsScreen() {
   };
 
   const selectedCountry = getCountryByCode(formData.countryCode);
+  const selectedWorkshop = workshops.find((w) => w.id === formData.workshopId);
 
   const renderClient = ({ item }: { item: Client }) => {
     const country = getCountryByCode(item.countryCode);
+    const clientWorkshop = workshops.find((w) => w.id === item.workshopId);
     
     return (
       <View style={styles.clientCard}>
@@ -162,6 +183,12 @@ export default function ClientsScreen() {
               <Globe size={14} color="#6b7280" />
               <Text style={styles.clientCountry}>{country?.name}</Text>
             </View>
+            {isAdmin && clientWorkshop && (
+              <View style={styles.clientDetail}>
+                <Building2 size={14} color="#6b7280" />
+                <Text style={styles.clientWorkshop}>{clientWorkshop.name}</Text>
+              </View>
+            )}
           </View>
           <View style={styles.clientActions}>
             <TouchableOpacity onPress={() => openEditModal(item)} style={styles.actionButton}>
@@ -213,6 +240,49 @@ export default function ClientsScreen() {
           <Plus size={24} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {isAdmin && workshops.length > 0 && (
+        <View style={styles.filterContainer}>
+          <Text style={styles.filterLabel}>Filtrar por mecánica:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                selectedWorkshopId === 'all' && styles.filterChipActive,
+              ]}
+              onPress={() => setSelectedWorkshopId('all')}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  selectedWorkshopId === 'all' && styles.filterChipTextActive,
+                ]}
+              >
+                Todas
+              </Text>
+            </TouchableOpacity>
+            {workshops.map((workshop) => (
+              <TouchableOpacity
+                key={workshop.id}
+                style={[
+                  styles.filterChip,
+                  selectedWorkshopId === workshop.id && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedWorkshopId(workshop.id)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedWorkshopId === workshop.id && styles.filterChipTextActive,
+                  ]}
+                >
+                  {workshop.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <FlatList
         data={filteredClients}
@@ -349,6 +419,21 @@ export default function ClientsScreen() {
                 />
               </View>
 
+              {isAdmin && workshops.length > 0 && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Mecánica</Text>
+                  <TouchableOpacity
+                    style={styles.workshopSelector}
+                    onPress={() => setShowWorkshopPicker(true)}
+                  >
+                    <Building2 size={20} color="#6b7280" />
+                    <Text style={styles.workshopSelectorText}>
+                      {selectedWorkshop?.name || 'Sin asignar'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <View style={styles.modalActions}>
                 <TouchableOpacity
                   style={styles.cancelButton}
@@ -403,6 +488,46 @@ export default function ClientsScreen() {
                 </TouchableOpacity>
               )}
               style={styles.countryList}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showWorkshopPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowWorkshopPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar Mecánica</Text>
+              <TouchableOpacity onPress={() => setShowWorkshopPicker(false)}>
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={[
+                { id: undefined, name: 'Sin asignar' },
+                ...workshops,
+              ]}
+              keyExtractor={(item) => item.id || 'unassigned'}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.workshopItem,
+                    formData.workshopId === item.id && styles.workshopItemSelected,
+                  ]}
+                  onPress={() => {
+                    setFormData({ ...formData, workshopId: item.id });
+                    setShowWorkshopPicker(false);
+                  }}
+                >
+                  <Text style={styles.workshopItemName}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              style={styles.workshopList}
             />
           </View>
         </View>
@@ -518,6 +643,10 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   clientCountry: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  clientWorkshop: {
     fontSize: 14,
     color: '#6b7280',
   },
@@ -714,5 +843,73 @@ const styles = StyleSheet.create({
   countryItemPrefix: {
     fontSize: 16,
     color: '#6b7280',
+  },
+  filterContainer: {
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#374151',
+    marginBottom: 8,
+  },
+  filterScroll: {
+    flexDirection: 'row',
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    marginRight: 8,
+  },
+  filterChipActive: {
+    backgroundColor: '#2563eb',
+  },
+  filterChipText: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: '#6b7280',
+  },
+  filterChipTextActive: {
+    color: '#fff',
+  },
+  workshopSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+  },
+  workshopSelectorText: {
+    fontSize: 16,
+    color: '#111827',
+    flex: 1,
+  },
+  workshopList: {
+    maxHeight: 400,
+  },
+  workshopItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  workshopItemSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  workshopItemName: {
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: '500' as const,
   },
 });

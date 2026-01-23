@@ -19,6 +19,7 @@ export interface Database {
           phone: string | null
           password: string
           client_id: string | null
+          workshop_id: string | null
           created_at: string
           updated_at: string
         }
@@ -31,6 +32,7 @@ export interface Database {
           phone?: string | null
           password: string
           client_id?: string | null
+          workshop_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -43,6 +45,7 @@ export interface Database {
           phone?: string | null
           password?: string
           client_id?: string | null
+          workshop_id?: string | null
           updated_at?: string
         }
       }
@@ -56,6 +59,7 @@ export interface Database {
           address: string | null
           document_number: string | null
           notes: string | null
+          workshop_id: string | null
           created_at: string
           updated_at: string
         }
@@ -68,6 +72,7 @@ export interface Database {
           address?: string | null
           document_number?: string | null
           notes?: string | null
+          workshop_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -80,6 +85,7 @@ export interface Database {
           address?: string | null
           document_number?: string | null
           notes?: string | null
+          workshop_id?: string | null
           updated_at?: string
         }
       }

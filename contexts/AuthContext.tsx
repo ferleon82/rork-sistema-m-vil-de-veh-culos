@@ -19,6 +19,7 @@ const mapDbUserToUser = (dbUser: DbUser): User => ({
   phone: dbUser.phone || undefined,
   password: dbUser.password,
   clientId: dbUser.client_id || undefined,
+  workshopId: dbUser.workshop_id || undefined,
 });
 
 type AppTabName =

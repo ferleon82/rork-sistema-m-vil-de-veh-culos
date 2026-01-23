@@ -9,6 +9,7 @@ export interface Client {
   address?: string;
   documentNumber?: string;
   notes?: string;
+  workshopId?: string;
   createdAt: string;
 }
 
@@ -21,6 +22,7 @@ export interface User {
   phone?: string;
   password: string;
   clientId?: string;
+  workshopId?: string;
 }
 
 export interface Workshop {

@@ -17,6 +17,7 @@ const mapDbClientToClient = (dbClient: DbClient): Client => ({
   address: dbClient.address || undefined,
   documentNumber: dbClient.document_number || undefined,
   notes: dbClient.notes || undefined,
+  workshopId: dbClient.workshop_id || undefined,
   createdAt: dbClient.created_at,
 });
 
@@ -28,6 +29,7 @@ const mapClientToDbInsert = (client: Omit<Client, 'id' | 'createdAt'>): DbClient
   address: client.address || null,
   document_number: client.documentNumber || null,
   notes: client.notes || null,
+  workshop_id: client.workshopId || null,
 });
 
 export const [ClientsProvider, useClients] = createContextHook(() => {
@@ -98,6 +100,7 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
       if (updates.address !== undefined) dbUpdate.address = updates.address || null;
       if (updates.documentNumber !== undefined) dbUpdate.document_number = updates.documentNumber || null;
       if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
+      if (updates.workshopId !== undefined) dbUpdate.workshop_id = updates.workshopId || null;
       
       const { data, error } = await supabase
         .from('clients')
@@ -155,6 +158,10 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
     );
   };
 
+  const getClientsByWorkshop = (workshopId: string) => {
+    return clients.filter((c) => c.workshopId === workshopId);
+  };
+
   return {
     clients,
     isLoading,
@@ -164,5 +171,6 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
     deleteClient,
     getClientById,
     searchClients,
+    getClientsByWorkshop,
   };
 });

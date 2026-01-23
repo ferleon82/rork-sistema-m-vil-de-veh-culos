@@ -21,10 +21,12 @@ import {
   Search,
   Globe,
   X,
+  Building2,
 } from 'lucide-react-native';
 import { LATIN_AMERICAN_COUNTRIES, getCountryByCode } from '@/constants/countries';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUsers } from '@/contexts/UsersContext';
+import { useWorkshops } from '@/contexts/WorkshopsContext';
 import { User, UserRole } from '@/types';
 
 type UserFormData = {
@@ -35,6 +37,7 @@ type UserFormData = {
   role: UserRole;
   password: string;
   confirmPassword: string;
+  workshopId?: string;
 };
 
 export default function UsersScreen() {
@@ -43,11 +46,14 @@ export default function UsersScreen() {
   const defaultRoleForCreation: UserRole = assignableRoles.includes('mechanic')
     ? 'mechanic'
     : assignableRoles[0] ?? 'mechanic';
-  const { users, addUser, updateUser, deleteUser } = useUsers();
+  const { users, addUser, updateUser, deleteUser, getUsersByWorkshop } = useUsers();
+  const { workshops } = useWorkshops();
   const canManageUsers = permissions.canManageUsers;
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>('all');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
+  const [showWorkshopPicker, setShowWorkshopPicker] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const roleOptions: UserRole[] =
     editingUser && !assignableRoles.includes(editingUser.role)
@@ -61,6 +67,7 @@ export default function UsersScreen() {
     role: defaultRoleForCreation,
     password: '',
     confirmPassword: '',
+    workshopId: undefined,
   });
 
   if (!canManageUsers) {
@@ -76,6 +83,7 @@ export default function UsersScreen() {
   }
 
   const selectedCountry = getCountryByCode(formData.countryCode);
+  const selectedWorkshop = workshops.find((w) => w.id === formData.workshopId);
 
   const handleOpenModal = (user?: User) => {
     if (user) {
@@ -92,6 +100,7 @@ export default function UsersScreen() {
         role: user.role,
         password: '',
         confirmPassword: '',
+        workshopId: user.workshopId,
       });
     } else {
       setEditingUser(null);
@@ -103,6 +112,7 @@ export default function UsersScreen() {
         role: defaultRoleForCreation,
         password: '',
         confirmPassword: '',
+        workshopId: undefined,
       });
     }
     setModalVisible(true);
@@ -164,6 +174,7 @@ export default function UsersScreen() {
         countryCode: formData.countryCode,
         phone: formData.phone ? formData.phone : undefined,
         password: passwordToPersist,
+        workshopId: formData.workshopId,
       };
 
       if (editingUser) {
@@ -247,9 +258,13 @@ export default function UsersScreen() {
     }
   };
 
-  const roleFilteredUsers = permissions.canManageUsers && currentUser?.role === 'technician'
+  let roleFilteredUsers = permissions.canManageUsers && currentUser?.role === 'technician'
     ? users.filter((u) => u.id === currentUser.id)
     : users;
+
+  if (isAdmin && selectedWorkshopId !== 'all') {
+    roleFilteredUsers = getUsersByWorkshop(selectedWorkshopId);
+  }
 
   const filteredUsers = searchQuery
     ? roleFilteredUsers.filter((u) => {
@@ -266,6 +281,7 @@ export default function UsersScreen() {
 
   const renderUser = ({ item }: { item: User }) => {
     const country = getCountryByCode(item.countryCode);
+    const userWorkshop = workshops.find((w) => w.id === item.workshopId);
 
     return (
       <View style={styles.userCard}>
@@ -279,6 +295,12 @@ export default function UsersScreen() {
             <View style={styles.userMeta}>
               <Globe size={14} color="#6b7280" />
               <Text style={styles.userCountry}>{country.name}</Text>
+            </View>
+          )}
+          {isAdmin && userWorkshop && (
+            <View style={styles.userMeta}>
+              <Building2 size={14} color="#6b7280" />
+              <Text style={styles.userWorkshop}>{userWorkshop.name}</Text>
             </View>
           )}
           <View style={[styles.roleBadge, { backgroundColor: `${getRoleColor(item.role)}15` }]}>
@@ -348,6 +370,49 @@ export default function UsersScreen() {
           <Plus size={24} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {isAdmin && workshops.length > 0 && (
+        <View style={styles.filterContainer}>
+          <Text style={styles.filterLabel}>Filtrar por mecánica:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+            <TouchableOpacity
+              style={[
+                styles.filterChip,
+                selectedWorkshopId === 'all' && styles.filterChipActive,
+              ]}
+              onPress={() => setSelectedWorkshopId('all')}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  selectedWorkshopId === 'all' && styles.filterChipTextActive,
+                ]}
+              >
+                Todas
+              </Text>
+            </TouchableOpacity>
+            {workshops.map((workshop) => (
+              <TouchableOpacity
+                key={workshop.id}
+                style={[
+                  styles.filterChip,
+                  selectedWorkshopId === workshop.id && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedWorkshopId(workshop.id)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedWorkshopId === workshop.id && styles.filterChipTextActive,
+                  ]}
+                >
+                  {workshop.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <View style={styles.helperCard}>
         <Text style={styles.helperTitle}>{isAdmin ? 'Rol Administrador' : 'Rol Técnico'}</Text>
@@ -503,6 +568,21 @@ export default function UsersScreen() {
                 testID="user-password-confirm-input"
               />
 
+              {isAdmin && workshops.length > 0 && (
+                <View style={{ marginTop: 16 }}>
+                  <Text style={styles.label}>Mecánica</Text>
+                  <TouchableOpacity
+                    style={styles.workshopSelector}
+                    onPress={() => setShowWorkshopPicker(true)}
+                  >
+                    <Building2 size={20} color="#6b7280" />
+                    <Text style={styles.workshopSelectorText}>
+                      {selectedWorkshop?.name || 'Sin asignar'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.cancelButton]}
@@ -558,6 +638,46 @@ export default function UsersScreen() {
               )}
               contentContainerStyle={styles.countryList}
               testID="user-country-list"
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showWorkshopPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowWorkshopPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.countryModalContent}>
+            <View style={styles.countryModalHeader}>
+              <Text style={styles.countryModalTitle}>Seleccionar Mecánica</Text>
+              <TouchableOpacity onPress={() => setShowWorkshopPicker(false)}>
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={[
+                { id: undefined, name: 'Sin asignar' },
+                ...workshops,
+              ]}
+              keyExtractor={(item) => item.id || 'unassigned'}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.countryItem,
+                    formData.workshopId === item.id && styles.countryItemSelected,
+                  ]}
+                  onPress={() => {
+                    setFormData({ ...formData, workshopId: item.id });
+                    setShowWorkshopPicker(false);
+                  }}
+                >
+                  <Text style={styles.countryItemName}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              contentContainerStyle={styles.countryList}
             />
           </View>
         </View>
@@ -721,6 +841,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   userCountry: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  userWorkshop: {
     fontSize: 13,
     color: '#6b7280',
   },
@@ -920,5 +1044,54 @@ const styles = StyleSheet.create({
   countryItemPrefix: {
     fontSize: 16,
     color: '#6b7280',
+  },
+  filterContainer: {
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#374151',
+    marginBottom: 8,
+  },
+  filterScroll: {
+    flexDirection: 'row',
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    marginRight: 8,
+  },
+  filterChipActive: {
+    backgroundColor: '#2563eb',
+  },
+  filterChipText: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: '#6b7280',
+  },
+  filterChipTextActive: {
+    color: '#fff',
+  },
+  workshopSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+  },
+  workshopSelectorText: {
+    fontSize: 16,
+    color: '#111827',
+    flex: 1,
   },
 });
