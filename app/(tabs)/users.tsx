@@ -110,7 +110,7 @@ export default function UsersScreen() {
         role: defaultRoleForCreation,
         password: '',
         confirmPassword: '',
-        workshopId: undefined,
+        workshopId: currentUser?.role === 'technician' ? currentUser.workshopId : undefined,
       });
     }
     setModalVisible(true);
@@ -257,9 +257,13 @@ export default function UsersScreen() {
     }
   };
 
-  let roleFilteredUsers = permissions.canManageUsers && currentUser?.role === 'technician'
-    ? users.filter((u) => u.id === currentUser.id)
-    : users;
+  let roleFilteredUsers = users;
+
+  if (currentUser?.role === 'technician' && currentUser.workshopId) {
+    roleFilteredUsers = users.filter(
+      (u) => u.workshopId === currentUser.workshopId || u.id === currentUser.id
+    );
+  }
 
   if (isAdmin && selectedWorkshopId !== 'all') {
     roleFilteredUsers = getUsersByWorkshop(selectedWorkshopId);
