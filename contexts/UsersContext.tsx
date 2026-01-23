@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { User, UserRole } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 
 type DbUser = Database['public']['Tables']['users']['Row'];
 type DbUserInsert = Database['public']['Tables']['users']['Insert'];
@@ -32,20 +33,26 @@ const mapUserToDbInsert = (user: Omit<User, 'id'>): DbUserInsert => ({
 });
 
 export const [UsersProvider, useUsers] = createContextHook(() => {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    loadUsers();
-  }, []);
+    if (currentUser) {
+      loadUsers();
+    }
+  }, [currentUser]);
 
   const loadUsers = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let query = supabase.from('users').select('*');
+      
+      if (currentUser?.role === 'technician' && currentUser.workshopId) {
+        query = query.eq('workshop_id', currentUser.workshopId);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) {
         console.error('Error loading users:', error);

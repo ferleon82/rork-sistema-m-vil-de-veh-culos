@@ -259,12 +259,6 @@ export default function UsersScreen() {
 
   let roleFilteredUsers = users;
 
-  if (currentUser?.role === 'technician' && currentUser.workshopId) {
-    roleFilteredUsers = users.filter(
-      (u) => u.workshopId === currentUser.workshopId || u.id === currentUser.id
-    );
-  }
-
   if (isAdmin && selectedWorkshopId !== 'all') {
     roleFilteredUsers = getUsersByWorkshop(selectedWorkshopId);
   }
