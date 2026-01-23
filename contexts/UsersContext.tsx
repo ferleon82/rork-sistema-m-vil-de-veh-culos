@@ -28,7 +28,6 @@ const mapUserToDbInsert = (user: Omit<User, 'id'>): DbUserInsert => ({
   phone: user.phone || null,
   password: user.password,
   client_id: user.clientId || null,
-  workshop_id: user.workshopId || null,
 });
 
 export const [UsersProvider, useUsers] = createContextHook(() => {
@@ -113,7 +112,6 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
       if (updates.phone !== undefined) dbUpdate.phone = updates.phone || null;
       if (updates.password !== undefined) dbUpdate.password = updates.password;
       if (updates.clientId !== undefined) dbUpdate.client_id = updates.clientId || null;
-      if (updates.workshopId !== undefined) dbUpdate.workshop_id = updates.workshopId || null;
       
       const { data, error } = await supabase
         .from('users')

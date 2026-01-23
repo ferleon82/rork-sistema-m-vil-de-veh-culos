@@ -37,7 +37,6 @@ type UserFormData = {
   role: UserRole;
   password: string;
   confirmPassword: string;
-  workshopId?: string;
 };
 
 export default function UsersScreen() {
@@ -53,7 +52,6 @@ export default function UsersScreen() {
   const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>('all');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
-  const [showWorkshopPicker, setShowWorkshopPicker] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const roleOptions: UserRole[] =
     editingUser && !assignableRoles.includes(editingUser.role)
@@ -67,7 +65,6 @@ export default function UsersScreen() {
     role: defaultRoleForCreation,
     password: '',
     confirmPassword: '',
-    workshopId: undefined,
   });
 
   if (!canManageUsers) {
@@ -83,7 +80,6 @@ export default function UsersScreen() {
   }
 
   const selectedCountry = getCountryByCode(formData.countryCode);
-  const selectedWorkshop = workshops.find((w) => w.id === formData.workshopId);
 
   const handleOpenModal = (user?: User) => {
     if (user) {
@@ -100,7 +96,6 @@ export default function UsersScreen() {
         role: user.role,
         password: '',
         confirmPassword: '',
-        workshopId: user.workshopId,
       });
     } else {
       setEditingUser(null);
@@ -112,7 +107,6 @@ export default function UsersScreen() {
         role: defaultRoleForCreation,
         password: '',
         confirmPassword: '',
-        workshopId: undefined,
       });
     }
     setModalVisible(true);
@@ -174,7 +168,6 @@ export default function UsersScreen() {
         countryCode: formData.countryCode,
         phone: formData.phone ? formData.phone : undefined,
         password: passwordToPersist,
-        workshopId: formData.workshopId,
       };
 
       if (editingUser) {
@@ -569,23 +562,7 @@ export default function UsersScreen() {
                 testID="user-password-confirm-input"
               />
 
-              {isAdmin && workshops.length > 0 && formData.role === 'technician' && (
-                <View style={{ marginTop: 16 }}>
-                  <Text style={styles.label}>Mecánica (opcional)</Text>
-                  <Text style={styles.helperText}>
-                    Puedes asignar la mecánica ahora o más tarde al crear la mecánica
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.workshopSelector}
-                    onPress={() => setShowWorkshopPicker(true)}
-                  >
-                    <Building2 size={20} color="#6b7280" />
-                    <Text style={styles.workshopSelectorText}>
-                      {selectedWorkshop?.name || 'Sin asignar'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -647,45 +624,7 @@ export default function UsersScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={showWorkshopPicker}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowWorkshopPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.countryModalContent}>
-            <View style={styles.countryModalHeader}>
-              <Text style={styles.countryModalTitle}>Seleccionar Mecánica</Text>
-              <TouchableOpacity onPress={() => setShowWorkshopPicker(false)}>
-                <X size={24} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={[
-                { id: undefined, name: 'Sin asignar' },
-                ...workshops,
-              ]}
-              keyExtractor={(item) => item.id || 'unassigned'}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.countryItem,
-                    formData.workshopId === item.id && styles.countryItemSelected,
-                  ]}
-                  onPress={() => {
-                    setFormData({ ...formData, workshopId: item.id });
-                    setShowWorkshopPicker(false);
-                  }}
-                >
-                  <Text style={styles.countryItemName}>{item.name}</Text>
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={styles.countryList}
-            />
-          </View>
-        </View>
-      </Modal>
+
     </View>
   );
 }
@@ -1083,19 +1022,5 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: '#fff',
   },
-  workshopSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 12,
-  },
-  workshopSelectorText: {
-    fontSize: 16,
-    color: '#111827',
-    flex: 1,
-  },
+
 });
