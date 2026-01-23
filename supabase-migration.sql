@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS clients (
     address TEXT,
     document_number TEXT,
     notes TEXT,
+    workshop_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone TEXT,
     password TEXT NOT NULL,
     client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+    workshop_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -67,6 +69,10 @@ CREATE TABLE IF NOT EXISTS workshops (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add foreign key constraints for workshop_id after workshops table is created
+ALTER TABLE users ADD CONSTRAINT fk_users_workshop FOREIGN KEY (workshop_id) REFERENCES workshops(id) ON DELETE SET NULL;
+ALTER TABLE clients ADD CONSTRAINT fk_clients_workshop FOREIGN KEY (workshop_id) REFERENCES workshops(id) ON DELETE SET NULL;
 
 -- Create vehicles table
 CREATE TABLE IF NOT EXISTS vehicles (
@@ -141,6 +147,8 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_workshop_id ON users(workshop_id);
+CREATE INDEX IF NOT EXISTS idx_clients_workshop_id ON clients(workshop_id);
 CREATE INDEX IF NOT EXISTS idx_vehicles_client_id ON vehicles(client_id);
 CREATE INDEX IF NOT EXISTS idx_vehicles_plate ON vehicles(plate);
 CREATE INDEX IF NOT EXISTS idx_work_orders_vehicle_id ON work_orders(vehicle_id);
