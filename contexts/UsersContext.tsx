@@ -88,9 +88,9 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
       }
       
       if (data) {
+        console.log('[UsersContext] User added successfully:', data.id);
+        await loadUsers();
         const newUser = mapDbUserToUser(data);
-        setUsers([...users, newUser]);
-        console.log('[UsersContext] User added successfully:', newUser.id);
         return newUser;
       }
     } catch (error) {
@@ -134,9 +134,8 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
       }
       
       if (data) {
-        const updatedUser = mapDbUserToUser(data);
-        setUsers(users.map((u) => (u.id === id ? updatedUser : u)));
         console.log('[UsersContext] User updated successfully');
+        await loadUsers();
       }
     } catch (error) {
       console.error('[UsersContext] Catch block error:', error);
