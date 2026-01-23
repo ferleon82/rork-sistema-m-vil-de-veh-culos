@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Client } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 
 type DbClient = Database['public']['Tables']['clients']['Row'];
 type DbClientInsert = Database['public']['Tables']['clients']['Insert'];
@@ -33,20 +34,26 @@ const mapClientToDbInsert = (client: Omit<Client, 'id' | 'createdAt'>): DbClient
 });
 
 export const [ClientsProvider, useClients] = createContextHook(() => {
+  const { user: currentUser } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    loadClients();
-  }, []);
+    if (currentUser) {
+      loadClients();
+    }
+  }, [currentUser]);
 
   const loadClients = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let query = supabase.from('clients').select('*');
+      
+      if (currentUser?.role === 'technician' && currentUser.workshopId) {
+        query = query.eq('workshop_id', currentUser.workshopId);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) {
         console.error('Error loading clients:', error);

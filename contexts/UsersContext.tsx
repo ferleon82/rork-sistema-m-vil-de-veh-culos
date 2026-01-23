@@ -46,10 +46,29 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
   const loadUsers = async () => {
     try {
       setIsLoading(true);
+      console.log('[UsersContext] Loading users for:', currentUser?.role, 'workshopId:', currentUser?.workshopId);
+      
       let query = supabase.from('users').select('*');
       
-      if (currentUser?.role === 'technician' && currentUser.workshopId) {
-        query = query.eq('workshop_id', currentUser.workshopId);
+      if (currentUser?.role === 'admin') {
+        console.log('[UsersContext] Admin mode: Loading all users');
+      } else if (currentUser?.role === 'technician') {
+        console.log('[UsersContext] Technician mode: Filtering by workshop_id and role=mechanic');
+        if (currentUser.workshopId) {
+          query = query
+            .eq('workshop_id', currentUser.workshopId)
+            .eq('role', 'mechanic');
+        } else {
+          console.warn('[UsersContext] Technician has no workshopId, returning empty list');
+          setUsers([]);
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        console.log('[UsersContext] Other role, returning empty list');
+        setUsers([]);
+        setIsLoading(false);
+        return;
       }
       
       const { data, error } = await query.order('created_at', { ascending: false });
