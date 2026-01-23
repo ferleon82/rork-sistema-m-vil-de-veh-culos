@@ -186,8 +186,9 @@ export default function UsersScreen() {
       }
       handleCloseModal();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo guardar el usuario');
-      console.error(error);
+      console.error('[UsersScreen] Error saving user:', error);
+      const errorMessage = error instanceof Error ? error.message : 'No se pudo guardar el usuario';
+      Alert.alert('Error al guardar', errorMessage);
     }
   };
 
@@ -568,9 +569,12 @@ export default function UsersScreen() {
                 testID="user-password-confirm-input"
               />
 
-              {isAdmin && workshops.length > 0 && (
+              {isAdmin && workshops.length > 0 && formData.role === 'technician' && (
                 <View style={{ marginTop: 16 }}>
-                  <Text style={styles.label}>Mecánica</Text>
+                  <Text style={styles.label}>Mecánica (opcional)</Text>
+                  <Text style={styles.helperText}>
+                    Puedes asignar la mecánica ahora o más tarde al crear la mecánica
+                  </Text>
                   <TouchableOpacity
                     style={styles.workshopSelector}
                     onPress={() => setShowWorkshopPicker(true)}

@@ -66,7 +66,10 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
 
   const addUser = async (user: Omit<User, 'id'>) => {
     try {
+      console.log('[UsersContext] Adding user:', { ...user, password: '***' });
       const dbInsert = mapUserToDbInsert(user);
+      console.log('[UsersContext] DB Insert payload:', { ...dbInsert, password: '***' });
+      
       const { data, error } = await supabase
         .from('users')
         .insert(dbInsert)
@@ -74,23 +77,34 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
         .single();
       
       if (error) {
-        console.error('Error adding user:', error);
-        throw error;
+        console.error('[UsersContext] Supabase error:', error);
+        console.error('[UsersContext] Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw new Error(error.message || 'Error al crear usuario');
       }
       
       if (data) {
         const newUser = mapDbUserToUser(data);
         setUsers([...users, newUser]);
+        console.log('[UsersContext] User added successfully:', newUser.id);
         return newUser;
       }
     } catch (error) {
-      console.error('Error adding user:', error);
-      throw error;
+      console.error('[UsersContext] Catch block error:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Error desconocido al crear usuario');
     }
   };
 
   const updateUser = async (id: string, updates: Partial<User>) => {
     try {
+      console.log('[UsersContext] Updating user:', id, { ...updates, password: updates.password ? '***' : undefined });
       const dbUpdate: DbUserUpdate = {};
       if (updates.email !== undefined) dbUpdate.email = updates.email;
       if (updates.name !== undefined) dbUpdate.name = updates.name;
@@ -109,17 +123,27 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
         .single();
       
       if (error) {
-        console.error('Error updating user:', error);
-        throw error;
+        console.error('[UsersContext] Supabase error:', error);
+        console.error('[UsersContext] Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw new Error(error.message || 'Error al actualizar usuario');
       }
       
       if (data) {
         const updatedUser = mapDbUserToUser(data);
         setUsers(users.map((u) => (u.id === id ? updatedUser : u)));
+        console.log('[UsersContext] User updated successfully');
       }
     } catch (error) {
-      console.error('Error updating user:', error);
-      throw error;
+      console.error('[UsersContext] Catch block error:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Error desconocido al actualizar usuario');
     }
   };
 
