@@ -46,52 +46,22 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
   const loadUsers = async () => {
     try {
       setIsLoading(true);
-      console.log('[UsersContext] Loading users for:', currentUser?.role, 'workshopId:', currentUser?.workshopId);
-      
-      let query = supabase.from('users').select('*');
-      
-      if (currentUser?.role === 'admin') {
-        console.log('[UsersContext] Admin mode: Loading all users');
-      } else if (currentUser?.role === 'technician') {
-        console.log('[UsersContext] Technician mode: Filtering by workshop_id and role=mechanic');
-        if (currentUser.workshopId) {
-          query = query
-            .eq('workshop_id', currentUser.workshopId)
-            .eq('role', 'mechanic');
-          console.log('[UsersContext] Query filter:', { workshop_id: currentUser.workshopId, role: 'mechanic' });
-        } else {
-          console.warn('[UsersContext] ⚠️ Technician has no workshopId, returning empty list');
-          console.warn('[UsersContext] Current user data:', JSON.stringify(currentUser, null, 2));
-          setUsers([]);
-          setIsLoading(false);
-          return;
-        }
-      } else {
-        console.log('[UsersContext] Other role, returning empty list');
-        setUsers([]);
-        setIsLoading(false);
-        return;
-      }
-      
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
       
       if (error) {
-        console.error('[UsersContext] ❌ Error loading users:', error);
-        return;
-      }
-      
-      console.log('[UsersContext] ✅ Query successful. Found', data?.length || 0, 'users');
-      if (data && data.length > 0) {
-        console.log('[UsersContext] Sample user data:', JSON.stringify(data[0], null, 2));
+        console.error('Error loading users:', error);
+        throw error;
       }
       
       if (data) {
         const mappedUsers = data.map(mapDbUserToUser);
-        console.log('[UsersContext] Mapped users:', mappedUsers.length);
         setUsers(mappedUsers);
       }
     } catch (error) {
-      console.error('[UsersContext] ❌ Error loading users:', error);
+      console.error('Error loading users:', error);
     } finally {
       setIsLoading(false);
     }
