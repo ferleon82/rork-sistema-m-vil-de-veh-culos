@@ -46,22 +46,32 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
   const loadUsers = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
+      console.log('[UsersContext] Loading users for role:', currentUser?.role);
+      console.log('[UsersContext] Current user workshopId:', currentUser?.workshopId);
+      
+      let query = supabase.from('users').select('*');
+      
+      if (currentUser?.role === 'technician') {
+        console.log('[UsersContext] Applying technician filter: only mechanics from workshop', currentUser.workshopId);
+        query = query
+          .eq('role', 'mechanic')
+          .eq('workshop_id', currentUser.workshopId);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) {
-        console.error('Error loading users:', error);
+        console.error('[UsersContext] Error loading users:', error);
         throw error;
       }
       
       if (data) {
+        console.log('[UsersContext] Loaded users count:', data.length);
         const mappedUsers = data.map(mapDbUserToUser);
         setUsers(mappedUsers);
       }
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('[UsersContext] Error loading users:', error);
     } finally {
       setIsLoading(false);
     }
