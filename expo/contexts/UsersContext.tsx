@@ -166,20 +166,56 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
 
   const deleteUser = async (id: string) => {
     try {
-      const { error } = await supabase
+      console.log('[UsersContext] Deleting user:', id);
+      
+      const userToDelete = users.find(u => u.id === id);
+      console.log('[UsersContext] User to delete:', userToDelete);
+      
+      const { data: workshopsData, error: workshopsCheckError } = await supabase
+        .from('workshops')
+        .select('id, name')
+        .eq('owner_id', id);
+      
+      if (workshopsCheckError) {
+        console.error('[UsersContext] Error checking workshops:', workshopsCheckError);
+        throw new Error('Error al verificar talleres asociados');
+      }
+      
+      if (workshopsData && workshopsData.length > 0) {
+        const workshopNames = workshopsData.map(w => w.name).join(', ');
+        throw new Error(`No se puede eliminar este usuario porque es dueño de los siguientes talleres: ${workshopNames}. Elimina primero los talleres o cambia el propietario.`);
+      }
+      
+      console.log('[UsersContext] Updating work orders assigned to user...');
+      const { error: updateWorkOrdersError } = await supabase
+        .from('work_orders')
+        .update({ assigned_to: null })
+        .eq('assigned_to', id);
+      
+      if (updateWorkOrdersError) {
+        console.error('[UsersContext] Error updating work orders:', updateWorkOrdersError);
+        throw new Error('Error al actualizar las órdenes de trabajo asociadas');
+      }
+      
+      console.log('[UsersContext] Deleting user from database...');
+      const { error: deleteError } = await supabase
         .from('users')
         .delete()
         .eq('id', id);
       
-      if (error) {
-        console.error('Error deleting user:', error);
-        throw error;
+      if (deleteError) {
+        console.error('[UsersContext] Error deleting user:', deleteError);
+        throw new Error(deleteError.message || 'Error al eliminar el usuario');
       }
       
+      console.log('[UsersContext] User deleted successfully');
       setUsers(users.filter((u) => u.id !== id));
     } catch (error) {
-      console.error('Error deleting user:', error);
-      throw error;
+      console.error('[UsersContext] Error in deleteUser:', error);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Error desconocido al eliminar el usuario');
     }
   };
 

@@ -210,8 +210,14 @@ export default function UsersScreen() {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            await deleteUser(user.id);
-            Alert.alert('Éxito', 'Usuario eliminado correctamente');
+            try {
+              await deleteUser(user.id);
+              Alert.alert('Éxito', 'Usuario eliminado correctamente');
+            } catch (error) {
+              console.error('[UsersScreen] Error deleting user:', error);
+              const errorMessage = error instanceof Error ? error.message : 'No se pudo eliminar el usuario';
+              Alert.alert('Error al eliminar', errorMessage);
+            }
           },
         },
       ]
