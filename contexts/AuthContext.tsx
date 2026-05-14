@@ -4,11 +4,13 @@ import * as Linking from 'expo-linking';
 import { useRouter, useSegments } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { User, UserRole } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
 const STORAGE_KEY = '@auth_user';
+const NATIVE_AUTH_REDIRECT_URL = 'rork-app://login';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -107,6 +109,18 @@ const getAuthParamsFromUrl = (url: string) => {
   });
 
   return params;
+};
+
+const getOAuthRedirectUrl = () => {
+  if (Platform.OS !== 'web') {
+    return NATIVE_AUTH_REDIRECT_URL;
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/login`;
+  }
+
+  return Linking.createURL('login');
 };
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -305,7 +319,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       setIsLoading(true);
       setAuthError(null);
 
-      const redirectTo = Linking.createURL('login');
+      const redirectTo = getOAuthRedirectUrl();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
