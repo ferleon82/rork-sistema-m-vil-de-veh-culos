@@ -168,10 +168,27 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     try {
       setAuthError(null);
       const email = authEmail?.trim().toLowerCase();
-      let dbUser = await findInternalUserByAuthId(authUserId);
+      let dbUser = email ? await findInternalUserByEmail(email) : null;
+      const userLinkedToAuthId = await findInternalUserByAuthId(authUserId);
 
-      if (!dbUser && email) {
-        dbUser = await findInternalUserByEmail(email);
+      if (!dbUser) {
+        dbUser = userLinkedToAuthId;
+      }
+
+      if (dbUser && email && dbUser.email.toLowerCase() !== email) {
+        await supabase.auth.signOut();
+        await clearInternalSession();
+        setAuthError('Tu cuenta de Google no coincide con el correo autorizado en Gesticar.');
+        return null;
+      }
+
+      if (dbUser && userLinkedToAuthId && userLinkedToAuthId.id !== dbUser.id) {
+        const { error: unlinkError } = await supabase
+          .from('users')
+          .update({ auth_user_id: null })
+          .eq('id', userLinkedToAuthId.id);
+
+        if (unlinkError) throw unlinkError;
       }
 
       if (!dbUser) {
