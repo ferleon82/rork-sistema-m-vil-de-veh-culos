@@ -44,14 +44,17 @@ CREATE TABLE IF NOT EXISTS clients (
 -- Create users table (custom users, not auth.users)
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
     email TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     role user_role NOT NULL DEFAULT 'mechanic',
     country_code TEXT NOT NULL,
     phone TEXT,
-    password TEXT NOT NULL,
+    password TEXT,
     client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
     workshop_id UUID,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'disabled')),
+    last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -146,7 +149,9 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_auth_user_id ON users(auth_user_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_workshop_id ON users(workshop_id);
 CREATE INDEX IF NOT EXISTS idx_clients_workshop_id ON clients(workshop_id);
 CREATE INDEX IF NOT EXISTS idx_vehicles_client_id ON vehicles(client_id);

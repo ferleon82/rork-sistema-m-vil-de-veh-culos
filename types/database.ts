@@ -6,315 +6,376 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
   public: {
     Tables: {
-      users: {
+      budgets: {
         Row: {
+          approved_at: string | null
+          created_at: string | null
           id: string
-          email: string
-          name: string
-          role: 'admin' | 'technician' | 'mechanic'
-          country_code: string
-          phone: string | null
-          password: string
-          client_id: string | null
-          workshop_id: string | null
-          created_at: string
-          updated_at: string
+          items: Json
+          notes: string | null
+          rejected_at: string | null
+          sent_at: string | null
+          total_cost: number
+          updated_at: string | null
+          work_order_id: string
         }
         Insert: {
+          approved_at?: string | null
+          created_at?: string | null
           id?: string
-          email: string
-          name: string
-          role: 'admin' | 'technician' | 'mechanic'
-          country_code: string
-          phone?: string | null
-          password: string
-          client_id?: string | null
-          workshop_id?: string | null
-          created_at?: string
-          updated_at?: string
+          items?: Json
+          notes?: string | null
+          rejected_at?: string | null
+          sent_at?: string | null
+          total_cost?: number
+          updated_at?: string | null
+          work_order_id: string
         }
         Update: {
+          approved_at?: string | null
+          created_at?: string | null
           id?: string
-          email?: string
-          name?: string
-          role?: 'admin' | 'technician' | 'mechanic'
-          country_code?: string
-          phone?: string | null
-          password?: string
-          client_id?: string | null
-          workshop_id?: string | null
-          updated_at?: string
+          items?: Json
+          notes?: string | null
+          rejected_at?: string | null
+          sent_at?: string | null
+          total_cost?: number
+          updated_at?: string | null
+          work_order_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "budgets_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       clients: {
         Row: {
-          id: string
-          name: string
-          phone: string
-          country_code: string
-          email: string | null
           address: string | null
+          country_code: string
+          created_at: string | null
           document_number: string | null
-          notes: string | null
-          workshop_id: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          phone: string
-          country_code: string
-          email?: string | null
-          address?: string | null
-          document_number?: string | null
-          notes?: string | null
-          workshop_id?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          phone?: string
-          country_code?: string
-          email?: string | null
-          address?: string | null
-          document_number?: string | null
-          notes?: string | null
-          workshop_id?: string | null
-          updated_at?: string
-        }
-      }
-      workshops: {
-        Row: {
+          email: string | null
           id: string
           name: string
-          owner_id: string
-          country_code: string
-          phone: string | null
-          address: string | null
-          email: string | null
           notes: string | null
-          created_at: string
-          updated_at: string
+          phone: string
+          workshop_id: string | null
         }
         Insert: {
+          address?: string | null
+          country_code: string
+          created_at?: string | null
+          document_number?: string | null
+          email?: string | null
           id?: string
           name: string
-          owner_id: string
-          country_code: string
-          phone?: string | null
-          address?: string | null
-          email?: string | null
           notes?: string | null
-          created_at?: string
-          updated_at?: string
+          phone: string
+          workshop_id?: string | null
         }
         Update: {
+          address?: string | null
+          country_code?: string
+          created_at?: string | null
+          document_number?: string | null
+          email?: string | null
           id?: string
           name?: string
-          owner_id?: string
-          country_code?: string
-          phone?: string | null
-          address?: string | null
-          email?: string | null
           notes?: string | null
-          updated_at?: string
+          phone?: string
+          workshop_id?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "clients_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          auth_user_id: string | null
+          client_id: string | null
+          country_code: string
+          created_at: string | null
+          email: string
+          id: string
+          last_login_at: string | null
+          name: string
+          password: string | null
+          phone: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          status: string
+          updated_at: string | null
+          workshop_id: string | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          client_id?: string | null
+          country_code: string
+          created_at?: string | null
+          email: string
+          id?: string
+          last_login_at?: string | null
+          name: string
+          password?: string | null
+          phone?: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          status?: string
+          updated_at?: string | null
+          workshop_id?: string | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          client_id?: string | null
+          country_code?: string
+          created_at?: string | null
+          email?: string
+          id?: string
+          last_login_at?: string | null
+          name?: string
+          password?: string | null
+          phone?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          status?: string
+          updated_at?: string | null
+          workshop_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "users_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vehicles: {
         Row: {
-          id: string
-          vin: string
-          plate: string
           brand: string
-          model: string
-          year: number
-          current_km: number
           client_id: string
+          created_at: string | null
+          current_km: number
+          id: string
+          model: string
+          owner_email: string | null
           owner_name: string
           owner_phone: string
-          owner_email: string | null
           photo_url: string | null
-          created_at: string
-          updated_at: string
+          plate: string
+          updated_at: string | null
+          vin: string
+          year: number
         }
         Insert: {
-          id?: string
-          vin: string
-          plate: string
           brand: string
-          model: string
-          year: number
-          current_km: number
           client_id: string
+          created_at?: string | null
+          current_km: number
+          id?: string
+          model: string
+          owner_email?: string | null
           owner_name: string
           owner_phone: string
-          owner_email?: string | null
           photo_url?: string | null
-          created_at?: string
-          updated_at?: string
+          plate: string
+          updated_at?: string | null
+          vin: string
+          year: number
         }
         Update: {
-          id?: string
-          vin?: string
-          plate?: string
           brand?: string
-          model?: string
-          year?: number
-          current_km?: number
           client_id?: string
+          created_at?: string | null
+          current_km?: number
+          id?: string
+          model?: string
+          owner_email?: string | null
           owner_name?: string
           owner_phone?: string
-          owner_email?: string | null
           photo_url?: string | null
-          updated_at?: string
+          plate?: string
+          updated_at?: string | null
+          vin?: string
+          year?: number
         }
+        Relationships: [
+          {
+            foreignKeyName: "vehicles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       work_orders: {
         Row: {
-          id: string
+          assigned_to: string | null
+          check_in_at: string
           code: string
-          vehicle_id: string
-          status: 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled'
-          priority: 'low' | 'medium' | 'high'
+          completed_at: string | null
+          created_at: string
+          created_by: string
           description: string
           diagnosis: string | null
           diagnosis_category_id: string | null
           diagnosis_issue_id: string | null
           diagnosis_notes: string | null
-          items: Json
-          total_cost: number
-          created_by: string
-          assigned_to: string | null
-          check_in_at: string
-          started_at: string | null
-          completed_at: string | null
           estimated_completion_date: string | null
-          notes: string | null
+          id: string
           images: string[] | null
-          created_at: string
-          updated_at: string
+          items: Json
+          notes: string | null
+          priority: Database["public"]["Enums"]["work_order_priority"]
+          started_at: string | null
+          status: Database["public"]["Enums"]["work_order_status"]
+          total_cost: number
+          updated_at: string | null
+          vehicle_id: string
+          ai_diagnostic_guide: string | null
         }
         Insert: {
-          id?: string
+          assigned_to?: string | null
+          check_in_at: string
           code: string
-          vehicle_id: string
-          status: 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled'
-          priority: 'low' | 'medium' | 'high'
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
           description: string
           diagnosis?: string | null
           diagnosis_category_id?: string | null
           diagnosis_issue_id?: string | null
           diagnosis_notes?: string | null
-          items: Json
-          total_cost: number
-          created_by: string
-          assigned_to?: string | null
-          check_in_at: string
-          started_at?: string | null
-          completed_at?: string | null
           estimated_completion_date?: string | null
-          notes?: string | null
+          id?: string
           images?: string[] | null
-          created_at?: string
-          updated_at?: string
+          items?: Json
+          notes?: string | null
+          priority: Database["public"]["Enums"]["work_order_priority"]
+          started_at?: string | null
+          status: Database["public"]["Enums"]["work_order_status"]
+          total_cost?: number
+          updated_at?: string | null
+          vehicle_id: string
+          ai_diagnostic_guide?: string | null
         }
         Update: {
-          id?: string
+          assigned_to?: string | null
+          check_in_at?: string
           code?: string
-          vehicle_id?: string
-          status?: 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled'
-          priority?: 'low' | 'medium' | 'high'
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
           description?: string
           diagnosis?: string | null
           diagnosis_category_id?: string | null
           diagnosis_issue_id?: string | null
           diagnosis_notes?: string | null
-          items?: Json
-          total_cost?: number
-          created_by?: string
-          assigned_to?: string | null
-          check_in_at?: string
-          started_at?: string | null
-          completed_at?: string | null
           estimated_completion_date?: string | null
-          notes?: string | null
+          id?: string
           images?: string[] | null
-          updated_at?: string
-        }
-      }
-      budgets: {
-        Row: {
-          id: string
-          work_order_id: string
-          items: Json
-          total_cost: number
-          notes: string | null
-          sent_at: string | null
-          approved_at: string | null
-          rejected_at: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          work_order_id: string
-          items: Json
-          total_cost: number
-          notes?: string | null
-          sent_at?: string | null
-          approved_at?: string | null
-          rejected_at?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          work_order_id?: string
           items?: Json
-          total_cost?: number
           notes?: string | null
-          sent_at?: string | null
-          approved_at?: string | null
-          rejected_at?: string | null
-          updated_at?: string
+          priority?: Database["public"]["Enums"]["work_order_priority"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["work_order_status"]
+          total_cost?: number
+          updated_at?: string | null
+          vehicle_id?: string
+          ai_diagnostic_guide?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "work_orders_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      notifications: {
+      workshops: {
         Row: {
-          id: string
-          type: 'status_update' | 'budget_sent' | 'budget_approved' | 'work_completed'
-          work_order_id: string
-          message: string
-          phone_number: string
-          sent_at: string
-          delivered: boolean
+          address: string | null
+          country_code: string
           created_at: string
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          owner_id: string
+          phone: string | null
         }
         Insert: {
-          id?: string
-          type: 'status_update' | 'budget_sent' | 'budget_approved' | 'work_completed'
-          work_order_id: string
-          message: string
-          phone_number: string
-          sent_at: string
-          delivered: boolean
+          address?: string | null
+          country_code: string
           created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          owner_id: string
+          phone?: string | null
         }
         Update: {
+          address?: string | null
+          country_code?: string
+          created_at?: string
+          email?: string | null
           id?: string
-          type?: 'status_update' | 'budget_sent' | 'budget_approved' | 'work_completed'
-          work_order_id?: string
-          message?: string
-          phone_number?: string
-          sent_at?: string
-          delivered?: boolean
+          name?: string
+          notes?: string | null
+          owner_id?: string
+          phone?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "workshops_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -324,10 +385,120 @@ export interface Database {
       [_ in never]: never
     }
     Enums: {
-      user_role: 'admin' | 'technician' | 'mechanic'
-      work_order_status: 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled'
-      work_order_priority: 'low' | 'medium' | 'high'
-      notification_type: 'status_update' | 'budget_sent' | 'budget_approved' | 'work_completed'
+      notification_type:
+      | "status_update"
+      | "budget_sent"
+      | "budget_approved"
+      | "work_completed"
+      user_role: "admin" | "technician" | "mechanic"
+      work_order_priority: "low" | "medium" | "high" | "urgent"
+      work_order_status:
+      | "pending"
+      | "in_progress"
+      | "waiting_approval"
+      | "approved"
+      | "completed"
+      | "cancelled"
+    }
+    CompositeTypes: {
+      [_ in never]: never
     }
   }
 }
+
+type PublicSchema = Database[Extract<keyof Database, "public">]
+
+export type Tables<
+  PublicTableNameOrOptions extends
+  | keyof (PublicSchema["Tables"] & PublicSchema["Views"])
+  | { schema: keyof Database },
+  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+  ? keyof (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
+    Database[PublicTableNameOrOptions["schema"]]["Views"])
+  : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+  ? (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
+    Database[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+  ? R
+  : never
+  : PublicTableNameOrOptions extends keyof (PublicSchema["Tables"] &
+    PublicSchema["Views"])
+  ? (PublicSchema["Tables"] &
+    PublicSchema["Views"])[PublicTableNameOrOptions] extends {
+      Row: infer R
+    }
+  ? R
+  : never
+  : never
+
+export type TablesInsert<
+  PublicTableNameOrOptions extends
+  | keyof PublicSchema["Tables"]
+  | { schema: keyof Database },
+  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+  ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+    Insert: infer I
+  }
+  ? I
+  : never
+  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
+  ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+    Insert: infer I
+  }
+  ? I
+  : never
+  : never
+
+export type TablesUpdate<
+  PublicTableNameOrOptions extends
+  | keyof PublicSchema["Tables"]
+  | { schema: keyof Database },
+  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+  ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+    Update: infer U
+  }
+  ? U
+  : never
+  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
+  ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+    Update: infer U
+  }
+  ? U
+  : never
+  : never
+
+export type Enums<
+  PublicEnumNameOrOptions extends
+  | keyof PublicSchema["Enums"]
+  | { schema: keyof Database },
+  EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
+  ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+  : never = never,
+> = PublicEnumNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
+  ? PublicSchema["Enums"][PublicEnumNameOrOptions]
+  : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+  | keyof PublicSchema["CompositeTypes"]
+  | { schema: keyof Database },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof Database
+  }
+  ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+  : never = never,
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
+  ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : never

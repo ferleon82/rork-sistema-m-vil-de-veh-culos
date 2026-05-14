@@ -1,4 +1,5 @@
 export type UserRole = 'admin' | 'technician' | 'mechanic';
+export type UserStatus = 'pending' | 'active' | 'disabled';
 
 export interface Client {
   id: string;
@@ -10,31 +11,35 @@ export interface Client {
   documentNumber?: string;
   notes?: string;
   workshopId?: string;
-  createdAt: string;
+  createdAt?: string | null;
 }
 
 export interface User {
   id: string;
+  authUserId?: string;
   email: string;
   name: string;
   role: UserRole;
   countryCode: string;
   phone?: string;
-  password: string;
   clientId?: string;
   workshopId?: string;
+  status?: UserStatus;
+  lastLoginAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface Workshop {
   id: string;
   name: string;
-  ownerId: string;
-  countryCode: string;
-  phone?: string;
   address?: string;
+  phone?: string;
   email?: string;
+  countryCode: string;
+  ownerId: string;
   notes?: string;
-  createdAt: string;
+  createdAt?: string | null;
 }
 
 export interface Vehicle {
@@ -50,10 +55,55 @@ export interface Vehicle {
   ownerPhone: string;
   ownerEmail?: string;
   photoUrl?: string;
-  createdAt: string;
+  createdAt?: string | null;
 }
 
 export type WorkOrderStatus = 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled';
+export type WorkOrderPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface WorkOrder {
+  id: string;
+  code: string;
+  vehicleId: string;
+  status: WorkOrderStatus;
+  priority: WorkOrderPriority;
+  description: string;
+  diagnosis?: string;
+  diagnosisCategoryId?: string;
+  diagnosisIssueId?: string;
+  diagnosisNotes?: string;
+  items: any[];
+  totalCost: number;
+  createdBy: string;
+  assignedTo?: string;
+  checkInAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  estimatedCompletionDate?: string;
+  notes?: string;
+  images?: string[];
+  aiDiagnosticGuide?: string;
+  createdAt?: string | null;
+}
+
+export interface BudgetItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  type: 'part' | 'labor';
+}
+
+export interface Budget {
+  id: string;
+  totalCost: number;
+  items: BudgetItem[];
+  notes?: string;
+  sentAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  createdAt: string | null;
+}
 
 export interface WorkOrderItem {
   id: string;
@@ -63,49 +113,15 @@ export interface WorkOrderItem {
   total: number;
 }
 
-export interface WorkOrder {
-  id: string;
-  code: string;
+export interface WorkOrderFormState {
   vehicleId: string;
-  vehicle?: Vehicle;
-  status: WorkOrderStatus;
-  priority: 'low' | 'medium' | 'high';
   description: string;
-  diagnosis?: string;
-  diagnosisCategoryId?: string;
-  diagnosisIssueId?: string;
-  diagnosisNotes?: string;
+  diagnosisCategoryId: string;
+  diagnosisIssueId: string;
+  diagnosisNotes: string;
+  priority: WorkOrderPriority;
+  assignedTo: string;
+  checkInDate: string;
+  checkInTime: string;
   items: WorkOrderItem[];
-  totalCost: number;
-  createdBy: string;
-  assignedTo?: string;
-  checkInAt: string;
-  createdAt: string;
-  startedAt?: string;
-  completedAt?: string;
-  estimatedCompletionDate?: string;
-  notes?: string;
-  images?: string[];
-}
-
-export interface Budget {
-  id: string;
-  workOrderId: string;
-  items: WorkOrderItem[];
-  totalCost: number;
-  notes?: string;
-  createdAt: string;
-  sentAt?: string;
-  approvedAt?: string;
-  rejectedAt?: string;
-}
-
-export interface Notification {
-  id: string;
-  type: 'status_update' | 'budget_sent' | 'budget_approved' | 'work_completed';
-  workOrderId: string;
-  message: string;
-  phoneNumber: string;
-  sentAt: string;
-  delivered: boolean;
 }

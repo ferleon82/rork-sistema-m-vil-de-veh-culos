@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import {
   Plus,
@@ -22,6 +23,7 @@ import {
   Globe,
   X,
   Building2,
+  Mail,
 } from 'lucide-react-native';
 import { LATIN_AMERICAN_COUNTRIES, getCountryByCode } from '@/constants/countries';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,18 +37,16 @@ type UserFormData = {
   phone: string;
   countryCode: string;
   role: UserRole;
-  password: string;
-  confirmPassword: string;
   workshopId?: string;
 };
 
 export default function UsersScreen() {
-  const { isAdmin, permissions, user: currentUser } = useAuth();
+  const { isAdmin, isTechnician, permissions, user: currentUser } = useAuth();
   const assignableRoles = permissions.assignableRoles;
   const defaultRoleForCreation: UserRole = assignableRoles.includes('mechanic')
     ? 'mechanic'
     : assignableRoles[0] ?? 'mechanic';
-  const { users, addUser, updateUser, deleteUser, getUsersByWorkshop } = useUsers();
+  const { users, addUser, updateUser, deleteUser, getUsersByWorkshop, loadUsers } = useUsers();
   const { workshops } = useWorkshops();
   const canManageUsers = permissions.canManageUsers;
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -55,6 +55,7 @@ export default function UsersScreen() {
   const [showCountryPicker, setShowCountryPicker] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showWorkshopPicker, setShowWorkshopPicker] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const roleOptions: UserRole[] =
     editingUser && !assignableRoles.includes(editingUser.role)
       ? [...assignableRoles, editingUser.role]
@@ -65,8 +66,6 @@ export default function UsersScreen() {
     phone: '',
     countryCode: 'EC',
     role: defaultRoleForCreation,
-    password: '',
-    confirmPassword: '',
   });
 
   if (!canManageUsers) {
@@ -96,8 +95,6 @@ export default function UsersScreen() {
         phone: user.phone || '',
         countryCode: user.countryCode,
         role: user.role,
-        password: '',
-        confirmPassword: '',
         workshopId: user.workshopId,
       });
     } else {
@@ -108,8 +105,6 @@ export default function UsersScreen() {
         phone: '',
         countryCode: 'EC',
         role: defaultRoleForCreation,
-        password: '',
-        confirmPassword: '',
         workshopId: currentUser?.role === 'technician' ? currentUser.workshopId : undefined,
       });
     }
@@ -129,33 +124,6 @@ export default function UsersScreen() {
       return;
     }
 
-    const trimmedPassword = formData.password.trim();
-    const trimmedConfirm = formData.confirmPassword.trim();
-    const isEditing = Boolean(editingUser);
-
-    if (!isEditing && trimmedPassword.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-
-    if (trimmedPassword || trimmedConfirm) {
-      if (trimmedPassword.length < 6) {
-        Alert.alert('Error', 'La nueva contraseña debe tener al menos 6 caracteres');
-        return;
-      }
-      if (trimmedPassword !== trimmedConfirm) {
-        Alert.alert('Error', 'Las contraseñas no coinciden');
-        return;
-      }
-    }
-
-    const passwordToPersist = trimmedPassword || editingUser?.password || '';
-
-    if (!passwordToPersist) {
-      Alert.alert('Error', 'Debes definir una contraseña para este usuario');
-      return;
-    }
-
     const canAssignSelectedRole =
       permissions.assignableRoles.includes(formData.role) || editingUser?.role === formData.role;
 
@@ -167,20 +135,28 @@ export default function UsersScreen() {
     try {
       const payload: Omit<User, 'id'> = {
         name: formData.name.trim(),
-        email: formData.email.trim(),
+        email: formData.email.trim().toLowerCase(),
         role: formData.role,
         countryCode: formData.countryCode,
         phone: formData.phone ? formData.phone : undefined,
-        password: passwordToPersist,
         workshopId: formData.workshopId,
+        status: editingUser?.status || 'pending',
+        createdAt: editingUser?.createdAt,
+        updatedAt: editingUser?.updatedAt,
       };
 
       if (editingUser) {
         await updateUser(editingUser.id, payload);
         Alert.alert('Éxito', 'Usuario actualizado correctamente');
       } else {
-        await addUser(payload);
-        Alert.alert('Éxito', 'Usuario creado correctamente');
+        setIsSubmitting(true);
+        try {
+          await addUser(payload);
+          await loadUsers();
+          Alert.alert('Invitacion creada', 'El usuario ya puede ingresar con ese correo de Google.');
+        } finally {
+          setIsSubmitting(false);
+        }
       }
       handleCloseModal();
     } catch (error) {
@@ -210,8 +186,13 @@ export default function UsersScreen() {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            await deleteUser(user.id);
-            Alert.alert('Éxito', 'Usuario eliminado correctamente');
+            try {
+              await deleteUser(user.id);
+              Alert.alert('Éxito', 'Usuario eliminado correctamente');
+            } catch (error) {
+              console.error('[UsersScreen] Error deleting user:', error);
+              Alert.alert('Error', error instanceof Error ? error.message : 'No se pudo eliminar el usuario');
+            }
           },
         },
       ]
@@ -257,6 +238,30 @@ export default function UsersScreen() {
     }
   };
 
+  const getStatusLabel = (status?: User['status']) => {
+    switch (status) {
+      case 'active':
+        return 'Activo';
+      case 'disabled':
+        return 'Desactivado';
+      case 'pending':
+      default:
+        return 'Pendiente';
+    }
+  };
+
+  const getStatusColor = (status?: User['status']) => {
+    switch (status) {
+      case 'active':
+        return '#059669';
+      case 'disabled':
+        return '#dc2626';
+      case 'pending':
+      default:
+        return '#ca8a04';
+    }
+  };
+
   let roleFilteredUsers = users;
 
   if (isAdmin && selectedWorkshopId !== 'all') {
@@ -265,15 +270,15 @@ export default function UsersScreen() {
 
   const filteredUsers = searchQuery
     ? roleFilteredUsers.filter((u) => {
-        const country = getCountryByCode(u.countryCode);
-        return (
-          u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (u.phone && u.phone.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          getRoleLabel(u.role).toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (country && country.name.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
-      })
+      const country = getCountryByCode(u.countryCode);
+      return (
+        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.phone && u.phone.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        getRoleLabel(u.role).toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (country && country.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    })
     : roleFilteredUsers;
 
   const renderUser = ({ item }: { item: User }) => {
@@ -300,9 +305,14 @@ export default function UsersScreen() {
               <Text style={styles.userWorkshop}>{userWorkshop.name}</Text>
             </View>
           )}
-          <View style={[styles.roleBadge, { backgroundColor: `${getRoleColor(item.role)}15` }]}>
+          <View style={[styles.roleBadge, { backgroundColor: `${getRoleColor(item.role)} 15` }]}>
             <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
               {getRoleLabel(item.role)}
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { borderColor: getStatusColor(item.status) }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+              {getStatusLabel(item.status)}
             </Text>
           </View>
         </View>
@@ -341,7 +351,7 @@ export default function UsersScreen() {
     setFormData((prev) => ({
       ...prev,
       countryCode: code,
-      phone: nextCountry ? `${nextCountry.phonePrefix}${currentDigits}` : currentDigits,
+      phone: nextCountry ? `${nextCountry.phonePrefix}${currentDigits} ` : currentDigits,
     }));
     setShowCountryPicker(false);
   };
@@ -412,12 +422,26 @@ export default function UsersScreen() {
       )}
 
       <View style={styles.helperCard}>
-        <Text style={styles.helperTitle}>{isAdmin ? 'Rol Administrador' : 'Rol Técnico'}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={styles.helperTitle}>{isAdmin ? 'Rol Administrador' : 'Rol Técnico'}</Text>
+          {isTechnician && currentUser?.workshopId && (
+            <View style={styles.workshopBadge}>
+              <Text style={styles.workshopBadgeText}>
+                {workshops.find(w => w.id === currentUser.workshopId)?.name || 'Mecánica Vinculada'}
+              </Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.helperDescription}>
           {isAdmin
             ? 'Crea nuevas mecánicas y define los roles que colaborarán en la plataforma.'
             : 'Gestiona el equipo de tu mecánica. Solo puedes registrar nuevos mecánicos; los técnicos los crea el administrador maestro.'}
         </Text>
+        {isTechnician && !currentUser?.workshopId && (
+          <Text style={[styles.helperDescription, { color: '#dc2626', fontWeight: '700', marginTop: 4 }]}>
+            ⚠️ No tienes una mecánica asignada. Los mecánicos que crees no se guardarán correctamente.
+          </Text>
+        )}
       </View>
 
       <FlatList
@@ -476,6 +500,15 @@ export default function UsersScreen() {
                 testID="user-email-input"
               />
 
+              {!editingUser && (
+                <View style={styles.inviteNotice}>
+                  <Mail size={18} color="#2563eb" />
+                  <Text style={styles.inviteNoticeText}>
+                    No necesitas crear una contrasena. Este correo queda autorizado y el usuario entra con Google.
+                  </Text>
+                </View>
+              )}
+
               <Text style={styles.label}>
                 País <Text style={styles.required}>*</Text>
               </Text>
@@ -506,7 +539,7 @@ export default function UsersScreen() {
                     setFormData({
                       ...formData,
                       phone: selectedCountry
-                        ? `${selectedCountry.phonePrefix}${cleanPhone}`
+                        ? `${selectedCountry.phonePrefix}${cleanPhone} `
                         : cleanPhone,
                     });
                   }}
@@ -527,7 +560,7 @@ export default function UsersScreen() {
                       formData.role === role && { borderColor: getRoleColor(role) },
                     ]}
                     onPress={() => setFormData({ ...formData, role })}
-                    testID={`user-role-${role}`}
+                    testID={`user - role - ${role} `}
                   >
                     {getRoleIcon(role)}
                     <Text
@@ -542,28 +575,6 @@ export default function UsersScreen() {
                 ))}
               </View>
 
-              <Text style={styles.label}>Credenciales de acceso</Text>
-              <Text style={styles.helperText}>
-                Define una contraseña segura para que el usuario pueda iniciar sesión en Drivvo
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={formData.password}
-                onChangeText={(text) => setFormData({ ...formData, password: text })}
-                placeholder={editingUser ? 'Nueva contraseña (opcional)' : 'Contraseña'}
-                placeholderTextColor="#9ca3af"
-                secureTextEntry
-                testID="user-password-input"
-              />
-              <TextInput
-                style={[styles.input, { marginTop: 12 }]}
-                value={formData.confirmPassword}
-                onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
-                placeholder="Confirmar contraseña"
-                placeholderTextColor="#9ca3af"
-                secureTextEntry
-                testID="user-password-confirm-input"
-              />
 
               {isAdmin && workshops.length > 0 && (
                 <View style={{ marginTop: 12 }}>
@@ -856,10 +867,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    marginBottom: 6,
   },
   roleText: {
     fontSize: 12,
     fontWeight: '600' as const,
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: '#fff',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
   },
   userActions: {
     flexDirection: 'row',
@@ -909,6 +933,23 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#1f2937',
+  },
+  inviteNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+  },
+  inviteNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#1e3a8a',
   },
   countrySelector: {
     flexDirection: 'row',
@@ -1096,5 +1137,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111827',
     flex: 1,
+  },
+  workshopBadge: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  workshopBadgeText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#0369a1',
   },
 });

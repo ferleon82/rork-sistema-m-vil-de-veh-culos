@@ -29,9 +29,10 @@
       },
       "package": "app.rork.sistema_movil_vehiculos",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -45,7 +46,12 @@
         }
       ],
       "expo-font",
-      "expo-web-browser",
+      [
+        "expo-web-browser",
+        {
+          "experimentalLauncherActivity": false
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -55,6 +61,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://rork.com/"
+      },
+      "eas": {
+        "projectId": "b6756fb7-ce01-4402-b106-9f061acae7bd"
+      }
     }
   }
 }

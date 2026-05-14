@@ -3,109 +3,89 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
+  Image,
+  SafeAreaView,
 } from 'react-native';
-import { Wrench, Mail, Lock } from 'lucide-react-native';
+import { Mail, ShieldCheck } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const { login } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const { loginWithGoogle, authError } = useAuth();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Por favor ingresa tu email y contraseña');
-      return;
-    }
+  const handleGoogleLogin = async () => {
+    if (isSubmitting) return;
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
-      const result = await login(email, password);
+      const result = await loginWithGoogle();
       if (!result.success) {
-        Alert.alert('Error de autenticación', result.error || 'Credenciales incorrectas');
+        Alert.alert('Acceso no disponible', result.error || 'No se pudo iniciar sesion con Google');
       }
     } catch (error) {
-      Alert.alert('Error', 'Ocurrió un error inesperado al iniciar sesión');
-      console.error('Login error:', error);
+      Alert.alert('Error', 'Ocurrio un error inesperado');
+      console.error('[LoginScreen] Google auth error:', error);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <SafeAreaView style={styles.container}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Wrench size={48} color="#fff" />
+            <View style={styles.logoContainer}>
+              <Image
+                source={require('@/assets/images/logo-gesticar.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
             </View>
-            <Text style={styles.title}>Sistema de Mantenimiento</Text>
-            <Text style={styles.subtitle}>Vehicular</Text>
+            <Text style={styles.title}>Bienvenido</Text>
+            <Text style={styles.subtitle}>Ingresa con la cuenta autorizada para tu taller</Text>
           </View>
 
           <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Mail size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
-                editable={!isLoading}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Lock size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="password"
-                editable={!isLoading}
-              />
-            </View>
-
             <TouchableOpacity
-              style={[styles.button, isLoading && styles.buttonDisabled]}
-              onPress={handleLogin}
-              disabled={isLoading}
+              style={[styles.googleButton, isSubmitting && styles.buttonDisabled]}
+              onPress={handleGoogleLogin}
+              disabled={isSubmitting}
+              testID="google-login-button"
             >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
+              {isSubmitting ? (
+                <ActivityIndicator color="#1f2937" />
               ) : (
-                <Text style={styles.buttonText}>Iniciar Sesión</Text>
+                <>
+                  <View style={styles.googleIcon}>
+                    <Text style={styles.googleIconText}>G</Text>
+                  </View>
+                  <Text style={styles.googleButtonText}>Continuar con Google</Text>
+                </>
               )}
             </TouchableOpacity>
 
-            <View style={styles.demoInfo}>
-              <Text style={styles.demoTitle}>Cuentas de prueba:</Text>
-              <Text style={styles.demoText}>Admin: admin@taller.com</Text>
-              <Text style={styles.demoText}>Técnico: tecnico@taller.com</Text>
-              <Text style={styles.demoText}>Mecánico: mecanico@taller.com</Text>
-              <Text style={styles.demoText}>Contraseña: admin123</Text>
+            <View style={styles.accessNote}>
+              <ShieldCheck size={18} color="#2563eb" />
+              <Text style={styles.accessNoteText}>
+                Tu administrador debe invitar primero tu correo de Gmail en el modulo Usuarios.
+              </Text>
             </View>
+
+            {authError && (
+              <View style={styles.errorBox}>
+                <Mail size={18} color="#dc2626" />
+                <Text style={styles.errorText}>{authError}</Text>
+              </View>
+            )}
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </SafeAreaView>
     </>
   );
 }
@@ -124,96 +104,101 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 48,
   },
-  iconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: '#2563eb',
+  logoContainer: {
+    width: 250,
+    height: 125,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  },
+  logo: {
+    width: '100%',
+    height: '100%',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700' as const,
-    color: '#1f2937',
-    textAlign: 'center',
+    color: '#1e3a8a',
+    marginTop: 8,
   },
   subtitle: {
-    fontSize: 24,
-    fontWeight: '600' as const,
-    color: '#2563eb',
+    fontSize: 16,
+    color: '#666',
+    marginTop: 4,
     textAlign: 'center',
   },
   form: {
     gap: 16,
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  googleButton: {
+    height: 56,
     backgroundColor: '#fff',
     borderRadius: 12,
-    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    height: 56,
-    fontSize: 16,
-    color: '#1f2937',
-  },
-  button: {
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
-    height: 56,
-    justifyContent: 'center',
+    borderColor: '#d1d5db',
     alignItems: 'center',
-    marginTop: 8,
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.65,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  demoInfo: {
-    marginTop: 32,
-    padding: 16,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
+  googleIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#fbbf24',
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
   },
-  demoTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#92400e',
-    marginBottom: 8,
+  googleIconText: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: '#4285f4',
   },
-  demoText: {
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#1f2937',
+  },
+  accessNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    padding: 14,
+  },
+  accessNoteText: {
+    flex: 1,
+    color: '#1e3a8a',
     fontSize: 13,
-    color: '#78350f',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    lineHeight: 18,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 12,
+    padding: 14,
+  },
+  errorText: {
+    flex: 1,
+    color: '#991b1b',
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
