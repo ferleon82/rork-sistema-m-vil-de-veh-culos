@@ -351,6 +351,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (error) throw error;
       if (!data?.url) throw new Error('No se pudo iniciar Google OAuth.');
 
+      if (Platform.OS === 'web') {
+        window.location.assign(data.url);
+        return { success: true };
+      }
+
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type !== 'success') {
         return { success: false, error: 'Inicio de sesion cancelado.' };
