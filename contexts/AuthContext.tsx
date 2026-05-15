@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
 const STORAGE_KEY = '@auth_user';
-const NATIVE_AUTH_REDIRECT_URL = 'rork-app://login';
+const NATIVE_AUTH_REDIRECT_URL = 'gesticar://login';
 
 WebBrowser.maybeCompleteAuthSession();
 
