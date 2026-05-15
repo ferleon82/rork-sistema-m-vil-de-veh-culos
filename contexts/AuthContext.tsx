@@ -249,62 +249,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
   };
 
-  useEffect(() => {
-    const restoreSession = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-
-        if (data.session?.user) {
-          await loadUserFromSupabaseAuth(data.session.user.id, data.session.user.email);
-          return;
-        }
-
-        const storedUser = await AsyncStorage.getItem(STORAGE_KEY);
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          await loadUserData(parsedUser.id);
-        }
-      } catch (error) {
-        console.error('[AuthContext] Error restoring session:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    restoreSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await loadUserFromSupabaseAuth(session.user.id, session.user.email);
-      } else {
-        await clearInternalSession();
-      }
-      setIsLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isLoading) return;
-
-    const inLoginScreen = segments[0] === 'login';
-    const atRoot = !segments[0];
-
-    if (!user && !inLoginScreen) {
-      router.replace('/login' as any);
-    } else if (user && (inLoginScreen || atRoot)) {
-      const timeout = setTimeout(() => {
-        router.replace('/(tabs)' as any);
-      }, 100);
-      return () => clearTimeout(timeout);
-    }
-  }, [user, segments, isLoading, router]);
-
   const createSessionFromUrl = async (url: string) => {
     const params = getAuthParamsFromUrl(url);
 
@@ -330,6 +274,98 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     return null;
   };
+
+  const isOAuthCallbackUrl = (url?: string | null) => {
+    if (!url) return false;
+    return url.includes('code=') || url.includes('access_token=') || url.includes('error=');
+  };
+
+  const handleOAuthCallbackUrl = async (url?: string | null) => {
+    if (!isOAuthCallbackUrl(url)) return false;
+
+    const session = await createSessionFromUrl(url as string);
+    if (!session?.user) return false;
+
+    await loadUserFromSupabaseAuth(session.user.id, session.user.email);
+    return true;
+  };
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const callbackUrl =
+          Platform.OS === 'web' && typeof window !== 'undefined'
+            ? window.location.href
+            : await Linking.getInitialURL();
+
+        const handledCallback = await handleOAuthCallbackUrl(callbackUrl);
+        if (handledCallback) return;
+
+        const { data } = await supabase.auth.getSession();
+
+        if (data.session?.user) {
+          await loadUserFromSupabaseAuth(data.session.user.id, data.session.user.email);
+          return;
+        }
+
+        const storedUser = await AsyncStorage.getItem(STORAGE_KEY);
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          await loadUserData(parsedUser.id);
+        }
+      } catch (error) {
+        console.error('[AuthContext] Error restoring session:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    restoreSession();
+
+    const linkingSubscription = Linking.addEventListener('url', async ({ url }) => {
+      try {
+        setIsLoading(true);
+        await handleOAuthCallbackUrl(url);
+      } catch (error) {
+        console.error('[AuthContext] Error handling auth callback URL:', error);
+        setAuthError('No se pudo completar el inicio de sesion.');
+      } finally {
+        setIsLoading(false);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        await loadUserFromSupabaseAuth(session.user.id, session.user.email);
+      } else {
+        await clearInternalSession();
+      }
+      setIsLoading(false);
+    });
+
+    return () => {
+      linkingSubscription.remove();
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inLoginScreen = segments[0] === 'login';
+    const atRoot = !segments[0];
+
+    if (!user && !inLoginScreen) {
+      router.replace('/login' as any);
+    } else if (user && (inLoginScreen || atRoot)) {
+      const timeout = setTimeout(() => {
+        router.replace('/(tabs)' as any);
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [user, segments, isLoading, router]);
 
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     try {

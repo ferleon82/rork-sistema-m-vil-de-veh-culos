@@ -23,5 +23,5 @@ WHERE status IS NULL;
 
 -- Required Supabase Auth configuration:
 -- 1. Authentication > Providers > Google: enable Google and add the Google OAuth client ID/secret.
--- 2. Authentication > URL Configuration > Redirect URLs: add rork-app://**.
+-- 2. Authentication > URL Configuration > Redirect URLs: add gesticar://login and gesticar://**.
 -- 3. Create/invite each Gesticar user by Gmail in the users table before they try to sign in.
