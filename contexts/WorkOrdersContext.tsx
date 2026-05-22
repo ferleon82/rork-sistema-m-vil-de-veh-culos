@@ -58,6 +58,38 @@ const mapWorkOrderToDbInsert = (workOrder: Omit<WorkOrder, 'id' | 'code' | 'crea
   ai_diagnostic_guide: workOrder.aiDiagnosticGuide || null,
 });
 
+const ensureVehicleClientWorkshop = async (vehicleId?: string, assignedTo?: string | null) => {
+  if (!vehicleId || !assignedTo) return;
+
+  const { data: assignedUser, error: userError } = await supabase
+    .from('users')
+    .select('workshop_id')
+    .eq('id', assignedTo)
+    .maybeSingle();
+
+  if (userError || !assignedUser?.workshop_id) return;
+
+  const { data: vehicle, error: vehicleError } = await supabase
+    .from('vehicles')
+    .select('client_id, clients(workshop_id)')
+    .eq('id', vehicleId)
+    .maybeSingle();
+
+  if (vehicleError || !vehicle?.client_id) return;
+
+  const clientRelation = Array.isArray(vehicle.clients) ? vehicle.clients[0] : vehicle.clients;
+  if (clientRelation?.workshop_id) return;
+
+  const { error: clientUpdateError } = await supabase
+    .from('clients')
+    .update({ workshop_id: assignedUser.workshop_id })
+    .eq('id', vehicle.client_id);
+
+  if (clientUpdateError) {
+    console.error('[WorkOrdersContext] Error syncing client workshop from assigned mechanic:', clientUpdateError);
+  }
+};
+
 export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
   const { user: currentUser } = useAuth();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
@@ -126,9 +158,11 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
         .from('work_orders')
         .select('*, vehicles!inner(client_id, clients!inner(workshop_id))');
 
-      if ((currentUser?.role === 'technician' || currentUser?.role === 'mechanic') && currentUser.workshopId) {
+      if (currentUser?.role === 'mechanic') {
+        query = query.eq('assigned_to', currentUser.id);
+      } else if (currentUser?.role === 'technician' && currentUser.workshopId) {
         query = query.eq('vehicles.clients.workshop_id', currentUser.workshopId);
-      } else if ((currentUser?.role === 'technician' || currentUser?.role === 'mechanic') && !currentUser.workshopId) {
+      } else if (currentUser?.role === 'technician' && !currentUser.workshopId) {
         setWorkOrders([]);
         setIsLoading(false);
         return;
@@ -154,6 +188,8 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
 
   const addWorkOrder = async (workOrder: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'totalCost'>) => {
     try {
+      await ensureVehicleClientWorkshop(workOrder.vehicleId, workOrder.assignedTo);
+
       const totalCost = workOrder.items.reduce((sum, item) => sum + item.total, 0);
 
       const { count } = await supabase
@@ -180,6 +216,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       }
 
       if (data) {
+        await ensureVehicleClientWorkshop(data.vehicle_id, data.assigned_to);
         const newWorkOrder = mapDbWorkOrderToWorkOrder(data);
         setWorkOrders([newWorkOrder, ...workOrders]);
       }
@@ -227,6 +264,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
 
       if (data) {
         console.log('[WorkOrdersContext] Successfully updated work order:', data);
+        await ensureVehicleClientWorkshop(data.vehicle_id, data.assigned_to);
         const updatedWorkOrder = mapDbWorkOrderToWorkOrder(data);
         setWorkOrders(workOrders.map((wo) => (wo.id === id ? updatedWorkOrder : wo)));
       }
