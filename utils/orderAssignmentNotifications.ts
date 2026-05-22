@@ -1,24 +1,45 @@
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform, Vibration } from 'react-native';
 import { WorkOrder } from '@/types';
 
 const MECHANIC_ASSIGNMENTS_CHANNEL_ID = 'mechanic-order-assignments';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 let notificationsReady = false;
+let notificationHandlerConfigured = false;
+
+type NotificationsModule = typeof import('expo-notifications');
+
+const isExpoGo = Constants.appOwnership === 'expo';
+
+const loadNotificationsModule = async (): Promise<NotificationsModule | null> => {
+  if (Platform.OS === 'web' || isExpoGo) {
+    return null;
+  }
+
+  const Notifications = await import('expo-notifications');
+
+  if (!notificationHandlerConfigured) {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+    notificationHandlerConfigured = true;
+  }
+
+  return Notifications;
+};
 
 export const prepareOrderAssignmentNotifications = async () => {
-  if (notificationsReady || Platform.OS === 'web') {
+  if (notificationsReady || Platform.OS === 'web' || isExpoGo) {
     return notificationsReady;
   }
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return false;
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(MECHANIC_ASSIGNMENTS_CHANNEL_ID, {
@@ -55,6 +76,9 @@ export const notifyMechanicAssignedOrder = async (order: WorkOrder) => {
     if (!canNotify || Platform.OS === 'web') {
       return;
     }
+
+    const Notifications = await loadNotificationsModule();
+    if (!Notifications) return;
 
     await Notifications.scheduleNotificationAsync({
       content: {
