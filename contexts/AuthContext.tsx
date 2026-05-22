@@ -10,7 +10,8 @@ import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
 const STORAGE_KEY = '@auth_user';
-const NATIVE_AUTH_REDIRECT_URL = 'gesticar://login';
+const explicitAuthRedirectUrl = process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL;
+const REFRESH_INTERVAL_MS = 30000;
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -113,7 +114,11 @@ const getAuthParamsFromUrl = (url: string) => {
 
 const getOAuthRedirectUrl = () => {
   if (Platform.OS !== 'web') {
-    return NATIVE_AUTH_REDIRECT_URL;
+    if (explicitAuthRedirectUrl) {
+      return explicitAuthRedirectUrl;
+    }
+
+    return Linking.createURL('login');
   }
 
   if (typeof window !== 'undefined' && window.location?.origin) {
@@ -121,6 +126,13 @@ const getOAuthRedirectUrl = () => {
   }
 
   return Linking.createURL('login');
+};
+
+const clearWebOAuthCallbackUrl = () => {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+  const cleanUrl = `${window.location.origin}/login`;
+  window.history.replaceState(window.history.state, '', cleanUrl);
 };
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -138,6 +150,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const setInternalUser = async (dbUser: DbUser) => {
     const appUser = mapDbUserToUser(dbUser);
     setUser(appUser);
+    setAuthError(null);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(appUser));
     return appUser;
   };
@@ -283,11 +296,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   const handleOAuthCallbackUrl = async (url?: string | null) => {
     if (!isOAuthCallbackUrl(url)) return false;
 
-    const session = await createSessionFromUrl(url as string);
-    if (!session?.user) return false;
+    try {
+      const session = await createSessionFromUrl(url as string);
+      if (!session?.user) return false;
 
-    await loadUserFromSupabaseAuth(session.user.id, session.user.email);
-    return true;
+      await loadUserFromSupabaseAuth(session.user.id, session.user.email);
+      return true;
+    } finally {
+      clearWebOAuthCallbackUrl();
+    }
   };
 
   useEffect(() => {
@@ -336,13 +353,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await loadUserFromSupabaseAuth(session.user.id, session.user.email);
-      } else {
-        await clearInternalSession();
-      }
-      setIsLoading(false);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') return;
+
+      setTimeout(() => {
+        void (async () => {
+          try {
+            if (session?.user) {
+              await loadUserFromSupabaseAuth(session.user.id, session.user.email);
+            } else {
+              await clearInternalSession();
+            }
+          } finally {
+            setIsLoading(false);
+          }
+        })();
+      }, 0);
     });
 
     return () => {
@@ -366,6 +392,23 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       return () => clearTimeout(timeout);
     }
   }, [user, segments, isLoading, router]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const refreshCurrentUser = () => {
+      void loadUserData(user.id).catch((error) => {
+        console.error('[AuthContext] Error refreshing current user:', error);
+      });
+    };
+
+    const refreshInterval = setInterval(() => {
+      refreshCurrentUser();
+    }, REFRESH_INTERVAL_MS);
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, [user?.id]);
 
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -394,6 +437,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type !== 'success') {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session?.user) {
+          await loadUserFromSupabaseAuth(sessionData.session.user.id, sessionData.session.user.email);
+          return { success: true };
+        }
+
         return { success: false, error: 'Inicio de sesion cancelado.' };
       }
 

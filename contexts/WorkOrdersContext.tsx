@@ -1,12 +1,16 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect } from 'react';
+import { AppState } from 'react-native';
 import { WorkOrder, WorkOrderStatus } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
+import { handleDatabaseError } from '@/lib/errors';
 
 type DbWorkOrder = Database['public']['Tables']['work_orders']['Row'];
 type DbWorkOrderInsert = Database['public']['Tables']['work_orders']['Insert'];
 type DbWorkOrderUpdate = Database['public']['Tables']['work_orders']['Update'];
+const REFRESH_INTERVAL_MS = 5000;
 
 const mapDbWorkOrderToWorkOrder = (dbWorkOrder: DbWorkOrder): WorkOrder => ({
   id: dbWorkOrder.id,
@@ -29,6 +33,7 @@ const mapDbWorkOrderToWorkOrder = (dbWorkOrder: DbWorkOrder): WorkOrder => ({
   estimatedCompletionDate: dbWorkOrder.estimated_completion_date || undefined,
   notes: dbWorkOrder.notes || undefined,
   images: dbWorkOrder.images || undefined,
+  aiDiagnosticGuide: dbWorkOrder.ai_diagnostic_guide || undefined,
   createdAt: dbWorkOrder.created_at,
 });
 
@@ -50,34 +55,96 @@ const mapWorkOrderToDbInsert = (workOrder: Omit<WorkOrder, 'id' | 'code' | 'crea
   estimated_completion_date: workOrder.estimatedCompletionDate || null,
   notes: workOrder.notes || null,
   images: workOrder.images || null,
+  ai_diagnostic_guide: workOrder.aiDiagnosticGuide || null,
 });
 
 export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
+  const { user: currentUser } = useAuth();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    loadWorkOrders();
-  }, []);
+    if (!currentUser) {
+      setWorkOrders([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const refreshWorkOrders = () => {
+      void loadWorkOrders().catch((error) => {
+        console.error('[WorkOrdersContext] Error refreshing work orders:', error);
+      });
+    };
+
+    refreshWorkOrders();
+    const refreshInterval = setInterval(refreshWorkOrders, REFRESH_INTERVAL_MS);
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refreshWorkOrders();
+      }
+    });
+    const changesChannel = supabase
+      .channel(`work-orders-changes-${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'work_orders' },
+        () => {
+          refreshWorkOrders();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'vehicles' },
+        () => {
+          refreshWorkOrders();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clients' },
+        () => {
+          refreshWorkOrders();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('[WorkOrdersContext] Realtime channel error');
+        }
+      });
+
+    return () => {
+      clearInterval(refreshInterval);
+      appStateSubscription.remove();
+      void supabase.removeChannel(changesChannel);
+    };
+  }, [currentUser?.id, currentUser?.role, currentUser?.workshopId]);
 
   const loadWorkOrders = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('work_orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error loading work orders:', error);
+        .select('*, vehicles!inner(client_id, clients!inner(workshop_id))');
+
+      if ((currentUser?.role === 'technician' || currentUser?.role === 'mechanic') && currentUser.workshopId) {
+        query = query.eq('vehicles.clients.workshop_id', currentUser.workshopId);
+      } else if ((currentUser?.role === 'technician' || currentUser?.role === 'mechanic') && !currentUser.workshopId) {
+        setWorkOrders([]);
+        setIsLoading(false);
         return;
       }
-      
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+
+      if (error) {
+        throw handleDatabaseError(error, 'WorkOrdersContext:loadWorkOrders');
+      }
+
       if (data) {
         setWorkOrders(data.map(mapDbWorkOrderToWorkOrder));
       }
     } catch (error) {
-      console.error('Error loading work orders:', error);
+      throw handleDatabaseError(error, 'WorkOrdersContext:loadWorkOrders');
     } finally {
       setIsLoading(false);
     }
@@ -88,42 +155,36 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
   const addWorkOrder = async (workOrder: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'totalCost'>) => {
     try {
       const totalCost = workOrder.items.reduce((sum, item) => sum + item.total, 0);
-      
+
       const { count } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true });
-      
+
       const orderNumber = (count || 0) + 1;
       const code = `OT-${new Date().getFullYear()}-${orderNumber.toString().padStart(3, '0')}`;
-      
+
       const dbInsert = {
         ...mapWorkOrderToDbInsert(workOrder),
         code,
         total_cost: totalCost,
       };
-      
+
       const { data, error } = await supabase
         .from('work_orders')
         .insert(dbInsert as any)
         .select()
         .single();
-      
+
       if (error) {
-        console.error('Error adding work order:', error);
-        const errorMessage = error.message || error.details || error.hint || 'Error desconocido al crear la orden';
-        throw new Error(errorMessage);
+        throw handleDatabaseError(error, 'WorkOrdersContext:addWorkOrder');
       }
-      
+
       if (data) {
         const newWorkOrder = mapDbWorkOrderToWorkOrder(data);
         setWorkOrders([newWorkOrder, ...workOrders]);
       }
     } catch (error) {
-      console.error('Error adding work order:', error);
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error('Error desconocido al crear la orden');
+      throw handleDatabaseError(error, 'WorkOrdersContext:addWorkOrder');
     }
   };
 
@@ -148,85 +209,43 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       if (updates.estimatedCompletionDate !== undefined) dbUpdate.estimated_completion_date = updates.estimatedCompletionDate || null;
       if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
       if (updates.images !== undefined) dbUpdate.images = updates.images || null;
-      
+      if (updates.aiDiagnosticGuide !== undefined) dbUpdate.ai_diagnostic_guide = updates.aiDiagnosticGuide || null;
+
       console.log('[WorkOrdersContext] DB update payload:', JSON.stringify(dbUpdate, null, 2));
       console.log('[WorkOrdersContext] Updating work order with ID:', id);
-      
+
       const { data, error } = await supabase
         .from('work_orders')
         .update(dbUpdate)
         .eq('id', id)
         .select()
         .single();
-      
+
       if (error) {
-        console.error('[WorkOrdersContext] ===== SUPABASE ERROR DETAILS =====');
-        console.error('[WorkOrdersContext] Error object:', error);
-        console.error('[WorkOrdersContext] Error message:', error.message);
-        console.error('[WorkOrdersContext] Error details:', error.details);
-        console.error('[WorkOrdersContext] Error hint:', error.hint);
-        console.error('[WorkOrdersContext] Error code:', error.code);
-        console.error('[WorkOrdersContext] Full error JSON:', JSON.stringify(error, null, 2));
-        console.error('[WorkOrdersContext] =====================================');
-        
-        const errorParts = [];
-        if (error.message) errorParts.push(error.message);
-        if (error.details) errorParts.push(`Detalles: ${error.details}`);
-        if (error.hint) errorParts.push(`Sugerencia: ${error.hint}`);
-        if (error.code) errorParts.push(`Código: ${error.code}`);
-        
-        const errorMessage = errorParts.length > 0 
-          ? errorParts.join(' | ') 
-          : 'Error desconocido al actualizar la orden';
-        
-        throw new Error(errorMessage);
+        throw handleDatabaseError(error, 'WorkOrdersContext:updateWorkOrder');
       }
-      
+
       if (data) {
         console.log('[WorkOrdersContext] Successfully updated work order:', data);
         const updatedWorkOrder = mapDbWorkOrderToWorkOrder(data);
         setWorkOrders(workOrders.map((wo) => (wo.id === id ? updatedWorkOrder : wo)));
       }
     } catch (error) {
-      console.error('[WorkOrdersContext] ===== CATCH BLOCK ERROR =====');
-      console.error('[WorkOrdersContext] Error type:', typeof error);
-      console.error('[WorkOrdersContext] Error instanceof Error:', error instanceof Error);
-      console.error('[WorkOrdersContext] Error object:', error);
-      
-      if (error instanceof Error) {
-        console.error('[WorkOrdersContext] Error.message:', error.message);
-        console.error('[WorkOrdersContext] Error.stack:', error.stack);
-        throw error;
-      }
-      
-      let errorStr = 'Error desconocido';
-      try {
-        if (error && typeof error === 'object') {
-          errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
-        } else {
-          errorStr = String(error);
-        }
-      } catch (stringifyError) {
-        errorStr = 'Error al serializar el error';
-      }
-      
-      console.error('[WorkOrdersContext] Stringified error:', errorStr);
-      console.error('[WorkOrdersContext] ================================');
-      throw new Error(`Error al actualizar la orden: ${errorStr}`);
+      throw handleDatabaseError(error, 'WorkOrdersContext:updateWorkOrder');
     }
   };
 
   const updateWorkOrderStatus = async (id: string, status: WorkOrderStatus) => {
     const updates: Partial<WorkOrder> = { status };
-    
+
     if (status === 'in_progress' && !workOrders.find((wo) => wo.id === id)?.startedAt) {
       updates.startedAt = new Date().toISOString();
     }
-    
+
     if (status === 'completed') {
       updates.completedAt = new Date().toISOString();
     }
-    
+
     await updateWorkOrder(id, updates);
   };
 
@@ -236,20 +255,14 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
         .from('work_orders')
         .delete()
         .eq('id', id);
-      
+
       if (error) {
-        console.error('Error deleting work order:', error);
-        const errorMessage = error.message || error.details || error.hint || 'Error desconocido al eliminar la orden';
-        throw new Error(errorMessage);
+        throw handleDatabaseError(error, 'WorkOrdersContext:deleteWorkOrder');
       }
-      
+
       setWorkOrders(workOrders.filter((wo) => wo.id !== id));
     } catch (error) {
-      console.error('Error deleting work order:', error);
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error('Error desconocido al eliminar la orden');
+      throw handleDatabaseError(error, 'WorkOrdersContext:deleteWorkOrder');
     }
   };
 
@@ -265,6 +278,28 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
     return workOrders.filter((wo) => wo.vehicleId === vehicleId);
   };
 
+  const generateAIGuide = async (orderId: string, vehicleInfo: string, problemDescription: string) => {
+    try {
+      console.log('[WorkOrdersContext] Generating AI Guide for order:', orderId);
+      const { data, error } = await supabase.functions.invoke('generate-diagnostic-guide', {
+        body: {
+          vehicleInfo,
+          problemDescription,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.guide) {
+        await updateWorkOrder(orderId, { aiDiagnosticGuide: data.guide });
+        return data.guide;
+      }
+    } catch (error) {
+      console.error('[WorkOrdersContext] Error generating AI guide:', error);
+      throw error;
+    }
+  };
+
   return {
     workOrders,
     isLoading,
@@ -276,5 +311,6 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
     getWorkOrderById,
     getWorkOrdersByStatus,
     getWorkOrdersByVehicle,
+    generateAIGuide,
   };
 });
