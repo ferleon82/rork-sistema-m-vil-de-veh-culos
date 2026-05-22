@@ -9,6 +9,7 @@ import { handleDatabaseError } from '@/lib/errors';
 type DbUser = Database['public']['Tables']['users']['Row'];
 type DbUserInsert = Database['public']['Tables']['users']['Insert'];
 type DbUserUpdate = Database['public']['Tables']['users']['Update'];
+const REFRESH_INTERVAL_MS = 30000;
 
 const mapDbUserToUser = (dbUser: DbUser): User => ({
   id: dbUser.id,
@@ -44,10 +45,25 @@ export const [UsersProvider, useUsers] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    if (currentUser) {
-      loadUsers();
+    if (!currentUser) {
+      setUsers([]);
+      setIsLoading(false);
+      return;
     }
-  }, [currentUser]);
+
+    const refreshUsers = () => {
+      void loadUsers().catch((error) => {
+        console.error('[UsersContext] Error refreshing users:', error);
+      });
+    };
+
+    refreshUsers();
+    const refreshInterval = setInterval(refreshUsers, REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, [currentUser?.id, currentUser?.role, currentUser?.workshopId]);
 
   const loadUsers = async () => {
     try {

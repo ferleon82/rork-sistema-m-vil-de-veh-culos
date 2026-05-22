@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react';
 import { Workshop } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
+import { handleDatabaseError } from '@/lib/errors';
 
 type DbWorkshop = Database['public']['Tables']['workshops']['Row'];
 type DbWorkshopInsert = Database['public']['Tables']['workshops']['Insert'];
 type DbWorkshopUpdate = Database['public']['Tables']['workshops']['Update'];
+const REFRESH_INTERVAL_MS = 30000;
 
 const mapDbWorkshopToWorkshop = (dbWorkshop: DbWorkshop): Workshop => ({
   id: dbWorkshop.id,
@@ -35,7 +37,18 @@ export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    loadWorkshops();
+    const refreshWorkshops = () => {
+      void loadWorkshops().catch((error) => {
+        console.error('[WorkshopsContext] Error refreshing workshops:', error);
+      });
+    };
+
+    refreshWorkshops();
+    const refreshInterval = setInterval(refreshWorkshops, REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
   }, []);
 
   const loadWorkshops = async () => {
@@ -45,12 +58,12 @@ export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
         .from('workshops')
         .select('*')
         .order('created_at', { ascending: false });
-      
+
       if (error) {
         console.error('Error loading workshops:', error);
         return;
       }
-      
+
       if (data) {
         setWorkshops(data.map(mapDbWorkshopToWorkshop));
       }
@@ -71,20 +84,25 @@ export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
         .insert(dbInsert)
         .select()
         .single();
-      
+
       if (error) {
-        console.error('Error adding workshop:', error);
-        throw error;
+        throw handleDatabaseError(error, 'WorkshopsContext:addWorkshop');
       }
-      
+
       if (result) {
+        // Automatically link the owner to this workshop
+        await supabase
+          .from('users')
+          .update({ workshop_id: result.id })
+          .eq('id', result.owner_id);
+
         const newWorkshop = mapDbWorkshopToWorkshop(result);
         setWorkshops([newWorkshop, ...workshops]);
         return newWorkshop;
       }
     } catch (error) {
-      console.error('Error adding workshop:', error);
-      throw error;
+      if (error instanceof Error) throw error;
+      throw handleDatabaseError(error, 'WorkshopsContext:addWorkshop');
     }
   };
 
@@ -98,26 +116,33 @@ export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
       if (updates.address !== undefined) dbUpdate.address = updates.address || null;
       if (updates.email !== undefined) dbUpdate.email = updates.email || null;
       if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
-      
+
       const { data, error } = await supabase
         .from('workshops')
         .update(dbUpdate)
         .eq('id', id)
         .select()
         .single();
-      
+
       if (error) {
-        console.error('Error updating workshop:', error);
-        throw error;
+        throw handleDatabaseError(error, 'WorkshopsContext:updateWorkshop');
       }
-      
+
       if (data) {
+        // If owner changed, update the new owner's workshop_id
+        if (updates.ownerId) {
+          await supabase
+            .from('users')
+            .update({ workshop_id: data.id })
+            .eq('id', data.owner_id);
+        }
+
         const updatedWorkshop = mapDbWorkshopToWorkshop(data);
         setWorkshops(workshops.map((w) => (w.id === id ? updatedWorkshop : w)));
       }
     } catch (error) {
-      console.error('Error updating workshop:', error);
-      throw error;
+      if (error instanceof Error) throw error;
+      throw handleDatabaseError(error, 'WorkshopsContext:updateWorkshop');
     }
   };
 
@@ -127,16 +152,15 @@ export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
         .from('workshops')
         .delete()
         .eq('id', id);
-      
+
       if (error) {
-        console.error('Error deleting workshop:', error);
-        throw error;
+        throw handleDatabaseError(error, 'WorkshopsContext:deleteWorkshop');
       }
-      
+
       setWorkshops(workshops.filter((w) => w.id !== id));
     } catch (error) {
-      console.error('Error deleting workshop:', error);
-      throw error;
+      if (error instanceof Error) throw error;
+      throw handleDatabaseError(error, 'WorkshopsContext:deleteWorkshop');
     }
   };
 

@@ -4,10 +4,12 @@ import { Client } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
+import { handleDatabaseError } from '@/lib/errors';
 
 type DbClient = Database['public']['Tables']['clients']['Row'];
 type DbClientInsert = Database['public']['Tables']['clients']['Insert'];
 type DbClientUpdate = Database['public']['Tables']['clients']['Update'];
+const REFRESH_INTERVAL_MS = 30000;
 
 const mapDbClientToClient = (dbClient: DbClient): Client => ({
   id: dbClient.id,
@@ -39,27 +41,46 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    if (currentUser) {
-      loadClients();
+    if (!currentUser) {
+      setClients([]);
+      setIsLoading(false);
+      return;
     }
-  }, [currentUser]);
+
+    const refreshClients = () => {
+      void loadClients().catch((error) => {
+        console.error('[ClientsContext] Error refreshing clients:', error);
+      });
+    };
+
+    refreshClients();
+    const refreshInterval = setInterval(refreshClients, REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, [currentUser?.id, currentUser?.role, currentUser?.workshopId]);
 
   const loadClients = async () => {
     try {
       setIsLoading(true);
       let query = supabase.from('clients').select('*');
-      
-      if (currentUser?.role === 'technician' && currentUser.workshopId) {
+
+      if ((currentUser?.role === 'technician' || currentUser?.role === 'mechanic') && currentUser.workshopId) {
         query = query.eq('workshop_id', currentUser.workshopId);
+      } else if ((currentUser?.role === 'technician' || currentUser?.role === 'mechanic') && !currentUser.workshopId) {
+        setClients([]);
+        setIsLoading(false);
+        return;
       }
-      
+
       const { data, error } = await query.order('created_at', { ascending: false });
-      
+
       if (error) {
         console.error('Error loading clients:', error);
         return;
       }
-      
+
       if (data) {
         setClients(data.map(mapDbClientToClient));
       }
@@ -75,24 +96,25 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
   const addClient = async (client: Omit<Client, 'id' | 'createdAt'>) => {
     try {
       const dbInsert = mapClientToDbInsert(client);
+      console.log('[ClientsContext] Adding client with payload:', dbInsert);
+
       const { data, error } = await supabase
         .from('clients')
         .insert(dbInsert)
         .select()
         .single();
-      
+
       if (error) {
-        console.error('Error adding client:', error);
-        throw error;
+        throw handleDatabaseError(error, 'ClientsContext:addClient');
       }
-      
+
       if (data) {
         const newClient = mapDbClientToClient(data);
         setClients([newClient, ...clients]);
         return newClient;
       }
     } catch (error) {
-      console.error('Error adding client:', error);
+      console.error('[ClientsContext] Error in addClient:', error);
       throw error;
     }
   };
@@ -108,22 +130,38 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
       if (updates.documentNumber !== undefined) dbUpdate.document_number = updates.documentNumber || null;
       if (updates.notes !== undefined) dbUpdate.notes = updates.notes || null;
       if (updates.workshopId !== undefined) dbUpdate.workshop_id = updates.workshopId || null;
-      
+
       const { data, error } = await supabase
         .from('clients')
         .update(dbUpdate)
         .eq('id', id)
         .select()
         .single();
-      
+
       if (error) {
-        console.error('Error updating client:', error);
-        throw error;
+        throw handleDatabaseError(error, 'ClientsContext:updateClient');
       }
-      
+
       if (data) {
         const updatedClient = mapDbClientToClient(data);
         setClients(clients.map((c) => (c.id === id ? updatedClient : c)));
+
+        // Sync vital client info to vehicles table
+        const vehicleUpdates: any = {};
+        if (updates.name !== undefined) vehicleUpdates.owner_name = updates.name;
+        if (updates.phone !== undefined) vehicleUpdates.owner_phone = updates.phone;
+        if (updates.email !== undefined) vehicleUpdates.owner_email = updates.email || null;
+        
+        if (Object.keys(vehicleUpdates).length > 0) {
+          const { error: vehicleUpdateError } = await supabase
+            .from('vehicles')
+            .update(vehicleUpdates)
+            .eq('client_id', id);
+          
+          if (vehicleUpdateError) {
+            console.error('[ClientsContext] Error syncing client updates to vehicles:', vehicleUpdateError);
+          }
+        }
       }
     } catch (error) {
       console.error('Error updating client:', error);
@@ -137,16 +175,15 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
         .from('clients')
         .delete()
         .eq('id', id);
-      
+
       if (error) {
-        console.error('Error deleting client:', error);
-        throw error;
+        throw handleDatabaseError(error, 'ClientsContext:deleteClient');
       }
-      
+
       setClients(clients.filter((c) => c.id !== id));
     } catch (error) {
-      console.error('Error deleting client:', error);
-      throw error;
+      if (error instanceof Error) throw error;
+      throw handleDatabaseError(error, 'ClientsContext:deleteClient');
     }
   };
 
