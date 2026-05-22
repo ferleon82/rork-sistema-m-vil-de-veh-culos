@@ -135,7 +135,43 @@ const clearWebOAuthCallbackUrl = () => {
   window.history.replaceState(window.history.state, '', cleanUrl);
 };
 
-export const [AuthProvider, useAuth] = createContextHook(() => {
+type AuthResult = { success: boolean; error?: string };
+
+type AuthContextValue = {
+  user: User | null;
+  isLoading: boolean;
+  authError: string | null;
+  login: () => Promise<AuthResult>;
+  loginWithGoogle: () => Promise<AuthResult>;
+  logout: () => Promise<void>;
+  isAdmin: boolean;
+  isTechnician: boolean;
+  isMechanic: boolean;
+  permissions: RolePermissions;
+  refreshUser: () => Promise<User | undefined>;
+};
+
+const defaultAuthContextValue: AuthContextValue = {
+  user: null,
+  isLoading: false,
+  authError: null,
+  login: async () => ({
+    success: false,
+    error: 'El contexto de autenticacion no esta disponible.',
+  }),
+  loginWithGoogle: async () => ({
+    success: false,
+    error: 'El contexto de autenticacion no esta disponible.',
+  }),
+  logout: async () => undefined,
+  isAdmin: false,
+  isTechnician: false,
+  isMechanic: false,
+  permissions: getPermissions(),
+  refreshUser: async () => undefined,
+};
+
+export const [AuthProvider, useAuth] = createContextHook<AuthContextValue>(() => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
