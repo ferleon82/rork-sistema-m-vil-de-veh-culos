@@ -1,11 +1,12 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { WorkOrder, WorkOrderStatus } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 import { handleDatabaseError } from '@/lib/errors';
+import { notifyMechanicAssignedOrder, prepareOrderAssignmentNotifications } from '@/utils/orderAssignmentNotifications';
 
 type DbWorkOrder = Database['public']['Tables']['work_orders']['Row'];
 type DbWorkOrderInsert = Database['public']['Tables']['work_orders']['Insert'];
@@ -94,12 +95,23 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
   const { user: currentUser } = useAuth();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const knownAssignedOrderIdsRef = useRef<Set<string>>(new Set());
+  const hasLoadedAssignedOrdersRef = useRef<boolean>(false);
+  const notifiedAssignedOrderIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    knownAssignedOrderIdsRef.current = new Set();
+    hasLoadedAssignedOrdersRef.current = false;
+    notifiedAssignedOrderIdsRef.current = new Set();
+
     if (!currentUser) {
       setWorkOrders([]);
       setIsLoading(false);
       return;
+    }
+
+    if (currentUser.role === 'mechanic') {
+      void prepareOrderAssignmentNotifications();
     }
 
     const refreshWorkOrders = () => {
@@ -151,6 +163,36 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
     };
   }, [currentUser?.id, currentUser?.role, currentUser?.workshopId]);
 
+  const notifyNewAssignedOrders = (orders: WorkOrder[]) => {
+    if (currentUser?.role !== 'mechanic') return;
+
+    const activeAssignedOrders = orders.filter(
+      (order) =>
+        order.assignedTo === currentUser.id &&
+        order.status !== 'completed' &&
+        order.status !== 'cancelled'
+    );
+    const nextKnownIds = new Set(activeAssignedOrders.map((order) => order.id));
+
+    if (!hasLoadedAssignedOrdersRef.current) {
+      knownAssignedOrderIdsRef.current = nextKnownIds;
+      hasLoadedAssignedOrdersRef.current = true;
+      return;
+    }
+
+    activeAssignedOrders.forEach((order) => {
+      const alreadyKnown = knownAssignedOrderIdsRef.current.has(order.id);
+      const alreadyNotified = notifiedAssignedOrderIdsRef.current.has(order.id);
+
+      if (!alreadyKnown && !alreadyNotified) {
+        notifiedAssignedOrderIdsRef.current.add(order.id);
+        void notifyMechanicAssignedOrder(order);
+      }
+    });
+
+    knownAssignedOrderIdsRef.current = nextKnownIds;
+  };
+
   const loadWorkOrders = async () => {
     try {
       setIsLoading(true);
@@ -175,7 +217,9 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       }
 
       if (data) {
-        setWorkOrders(data.map(mapDbWorkOrderToWorkOrder));
+        const mappedOrders = data.map(mapDbWorkOrderToWorkOrder);
+        notifyNewAssignedOrders(mappedOrders);
+        setWorkOrders(mappedOrders);
       }
     } catch (error) {
       throw handleDatabaseError(error, 'WorkOrdersContext:loadWorkOrders');
