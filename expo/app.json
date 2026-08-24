@@ -2,7 +2,7 @@
   "expo": {
     "name": "Gesticar",
     "slug": "gesticar",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/gesticar-icon.png",
     "scheme": "gesticar",
@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "ec.gesticar.app",
+      "buildNumber": "2",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
@@ -23,6 +24,7 @@
       }
     },
     "android": {
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/gesticar-icon.png",
         "backgroundColor": "#ffffff"
