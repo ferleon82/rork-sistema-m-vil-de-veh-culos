@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Workshop } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 
 type DbWorkshop = Database['public']['Tables']['workshops']['Row'];
 type DbWorkshopInsert = Database['public']['Tables']['workshops']['Insert'];
@@ -11,7 +12,7 @@ type DbWorkshopUpdate = Database['public']['Tables']['workshops']['Update'];
 const mapDbWorkshopToWorkshop = (dbWorkshop: DbWorkshop): Workshop => ({
   id: dbWorkshop.id,
   name: dbWorkshop.name,
-  ownerId: dbWorkshop.owner_id,
+  ownerId: dbWorkshop.owner_id || undefined,
   countryCode: dbWorkshop.country_code,
   phone: dbWorkshop.phone || undefined,
   address: dbWorkshop.address || undefined,
@@ -22,7 +23,7 @@ const mapDbWorkshopToWorkshop = (dbWorkshop: DbWorkshop): Workshop => ({
 
 const mapWorkshopToDbInsert = (workshop: Omit<Workshop, 'id' | 'createdAt'>): DbWorkshopInsert => ({
   name: workshop.name,
-  owner_id: workshop.ownerId,
+  owner_id: workshop.ownerId || null,
   country_code: workshop.countryCode,
   phone: workshop.phone || null,
   address: workshop.address || null,
@@ -31,12 +32,30 @@ const mapWorkshopToDbInsert = (workshop: Omit<Workshop, 'id' | 'createdAt'>): Db
 });
 
 export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
+  const { user: currentUser } = useAuth();
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    loadWorkshops();
-  }, []);
+    if (currentUser) {
+      void loadWorkshops();
+      const channel = supabase
+        .channel(`workshops-${currentUser.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'workshops' },
+          () => void loadWorkshops(),
+        )
+        .subscribe();
+
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    } else {
+      setWorkshops([]);
+      setIsLoading(false);
+    }
+  }, [currentUser?.id]);
 
   const loadWorkshops = async () => {
     try {
@@ -92,7 +111,7 @@ export const [WorkshopsProvider, useWorkshops] = createContextHook(() => {
     try {
       const dbUpdate: DbWorkshopUpdate = {};
       if (updates.name !== undefined) dbUpdate.name = updates.name;
-      if (updates.ownerId !== undefined) dbUpdate.owner_id = updates.ownerId;
+      if (updates.ownerId !== undefined) dbUpdate.owner_id = updates.ownerId || null;
       if (updates.countryCode !== undefined) dbUpdate.country_code = updates.countryCode;
       if (updates.phone !== undefined) dbUpdate.phone = updates.phone || null;
       if (updates.address !== undefined) dbUpdate.address = updates.address || null;

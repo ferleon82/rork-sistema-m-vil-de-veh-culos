@@ -19,15 +19,16 @@ import {
   ChevronDown,
   Search,
   Edit,
-  ShieldAlert,
   Trash2,
   ClipboardList,
 } from 'lucide-react-native';
 import { useWorkOrders } from '@/contexts/WorkOrdersContext';
+import { useWorkLogs } from '@/contexts/WorkLogsContext';
 import { useVehicles } from '@/contexts/VehiclesContext';
 import { useUsers } from '@/contexts/UsersContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { sendStatusUpdate, sendBudget } from '@/utils/whatsapp';
+import { sendStatusUpdate, sendBudgetApproval } from '@/utils/whatsapp';
+import { useBudgetApprovals } from '@/contexts/BudgetApprovalsContext';
 import { WorkOrder, WorkOrderItem, WorkOrderStatus } from '@/types';
 import {
   VEHICLE_DIAGNOSTICS,
@@ -119,6 +120,14 @@ const createEmptyItem = (): WorkOrderItem => ({
   unitPrice: 0,
   total: 0,
 });
+const createActivityDraft = () => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  description: '',
+});
+type ActivityDraft = ReturnType<typeof createActivityDraft> & {
+  workLogId?: string;
+  initialDescription?: string;
+};
 const splitIsoToInputs = (iso?: string) => {
   const fallback = new Date();
   if (!iso) {
@@ -140,6 +149,27 @@ const splitIsoToInputs = (iso?: string) => {
   };
 };
 const cloneItems = (items: WorkOrderItem[]) => items.map((item) => ({ ...item }));
+
+const WORKFLOW_STEPS: { status: WorkOrderStatus; label: string }[] = [
+  { status: 'pending', label: 'Pendiente' },
+  { status: 'in_progress', label: 'En proceso' },
+  { status: 'technical_review', label: 'Revisión técnica' },
+  { status: 'ready_for_delivery', label: 'Listo para entrega' },
+  { status: 'completed', label: 'Entregado / cerrado' },
+];
+
+const isStartAuthorized = (approvalStatus: WorkOrder['approvalStatus']) =>
+  approvalStatus === 'not_required' || approvalStatus === 'approved';
+
+const getManagerTransitions = (status: WorkOrderStatus, approvalStatus: WorkOrder['approvalStatus']): WorkOrderStatus[] => {
+  const transitions: Partial<Record<WorkOrderStatus, WorkOrderStatus[]>> = {
+    pending: [...(isStartAuthorized(approvalStatus) ? ['in_progress' as WorkOrderStatus] : []), 'cancelled'],
+    in_progress: ['technical_review', 'cancelled'],
+    technical_review: ['in_progress', 'ready_for_delivery', 'cancelled'],
+    ready_for_delivery: ['in_progress', 'completed'],
+  };
+  return transitions[status] ?? [];
+};
 
 type WorkOrderFormState = {
   vehicleId: string;
@@ -192,6 +222,8 @@ const buildDiagnosisSummary = (params: {
 
 export default function WorkOrdersScreen() {
   const { workOrders, updateWorkOrderStatus, addWorkOrder, updateWorkOrder, deleteWorkOrder } = useWorkOrders();
+  const { prepareApproval, markSent } = useBudgetApprovals();
+  const { addWorkLog, updateWorkLog, getWorkLogsForOrder } = useWorkLogs();
   const { vehicles, getVehicleById } = useVehicles();
   const { getMechanics, getUserById } = useUsers();
   const { user, permissions } = useAuth();
@@ -211,6 +243,9 @@ export default function WorkOrdersScreen() {
   const [breakdownOrder, setBreakdownOrder] = useState<WorkOrder | null>(null);
   const [unitPriceInputs, setUnitPriceInputs] = useState<Record<string, string>>({});
   const [breakdownUnitPriceInputs, setBreakdownUnitPriceInputs] = useState<Record<string, string>>({});
+  const [activityOrder, setActivityOrder] = useState<WorkOrder | null>(null);
+  const [activityDrafts, setActivityDrafts] = useState<ActivityDraft[]>([createActivityDraft()]);
+  const [activityModalVisible, setActivityModalVisible] = useState(false);
 
   const mechanics = getMechanics();
 
@@ -285,8 +320,8 @@ export default function WorkOrdersScreen() {
     const colors: Record<string, string> = {
       pending: '#f59e0b',
       in_progress: '#3b82f6',
-      waiting_approval: '#8b5cf6',
-      approved: '#10b981',
+      technical_review: '#f97316',
+      ready_for_delivery: '#14b8a6',
       completed: '#059669',
       cancelled: '#ef4444',
     };
@@ -297,15 +332,41 @@ export default function WorkOrdersScreen() {
     const texts: Record<string, string> = {
       pending: 'Pendiente',
       in_progress: 'En Progreso',
-      waiting_approval: 'Esperando Aprobación',
-      approved: 'Aprobado',
-      completed: 'Completado',
+      technical_review: 'Pendiente de revisión técnica',
+      ready_for_delivery: 'Listo para entrega',
+      completed: 'Entregado / Cerrado',
       cancelled: 'Cancelado',
     };
     return texts[status] || status;
   };
 
-  const canManageBreakdown = (order: WorkOrder) => canManageOrders || (viewOnlyAssigned && order.assignedTo === user?.id);
+  const getApprovalLabel = (order: WorkOrder) => {
+    const labels: Record<WorkOrder['approvalStatus'], string> = {
+      not_required: 'No requiere aprobación',
+      draft: 'Aprobación por enviar',
+      pending: 'Esperando aprobación del cliente',
+      approved: 'Presupuesto aprobado',
+      partial: 'Aprobación parcial',
+      rejected: 'Presupuesto rechazado',
+      expired: 'Aprobación vencida',
+      revoked: 'Aprobación reemplazada',
+    };
+    return labels[order.approvalStatus];
+  };
+
+  const getApprovalColor = (approvalStatus: WorkOrder['approvalStatus']) => {
+    const colors: Record<WorkOrder['approvalStatus'], string> = {
+      not_required: '#64748b', draft: '#b45309', pending: '#7e22ce', approved: '#047857',
+      partial: '#c2410c', rejected: '#b91c1c', expired: '#b45309', revoked: '#64748b',
+    };
+    return colors[approvalStatus];
+  };
+
+  const canManageBreakdown = () => canManageOrders;
+  const canRegisterActivity = (order: WorkOrder) =>
+    viewOnlyAssigned
+    && order.assignedTo === user?.id
+    && (order.status === 'in_progress' || (order.status === 'pending' && isStartAuthorized(order.approvalStatus)));
 
   const handleSendStatusUpdate = async (orderId: string) => {
     const order = workOrders.find((wo) => wo.id === orderId);
@@ -342,54 +403,47 @@ export default function WorkOrdersScreen() {
       return;
     }
 
-    setSendingId(orderId);
-    console.log('[WorkOrders] Sending budget', { orderId, itemCount: order.items.length });
-    const success = await sendBudget(order, vehicle);
-    setSendingId(null);
-
-    if (success) {
-      await updateWorkOrderStatus(orderId, 'waiting_approval');
-      Alert.alert('Éxito', 'Presupuesto enviado por WhatsApp');
+    try {
+      setSendingId(orderId);
+      const { approval, approvalUrl } = await prepareApproval(orderId);
+      const success = await sendBudgetApproval(order, vehicle, approvalUrl);
+      if (success) {
+        await markSent(approval.id);
+        Alert.alert('Solicitud enviada', 'El cliente puede aprobar o rechazar cada concepto desde el enlace de WhatsApp.');
+      }
+    } catch (error) {
+      console.error('[WorkOrders] Error preparing approval:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'No se pudo preparar la aprobación.');
+    } finally {
+      setSendingId(null);
     }
   };
 
-  const handleChangeStatus = (orderId: string, currentStatus: WorkOrderStatus) => {
-    const statusOptions: { label: string; value: WorkOrderStatus }[] = [
-      { label: 'Pendiente', value: 'pending' },
-      { label: 'En Progreso', value: 'in_progress' },
-      { label: 'Esperando Aprobación', value: 'waiting_approval' },
-      { label: 'Aprobado', value: 'approved' },
-      { label: 'Completado', value: 'completed' },
-      { label: 'Cancelado', value: 'cancelled' },
-    ];
+  const handleStatusTransition = (order: WorkOrder, nextStatus: WorkOrderStatus) => {
+    const label = getStatusText(nextStatus);
+    const isFinal = nextStatus === 'completed' || nextStatus === 'cancelled';
+    const isMechanicReview = nextStatus === 'technical_review' && viewOnlyAssigned;
+    const message = isMechanicReview
+      ? 'Las actividades quedarán disponibles para que el técnico revise y asigne los rubros.'
+      : isFinal
+        ? `¿Confirmas cambiar la orden a “${label}”?`
+        : `¿Cambiar la orden a “${label}”?`;
 
-    Alert.alert(
-      'Cambiar Estado',
-      'Selecciona el nuevo estado',
-      statusOptions.map((option) => ({
-        text: option.label,
+    Alert.alert('Actualizar estado', message, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Confirmar',
+        style: nextStatus === 'cancelled' ? 'destructive' : 'default',
         onPress: async () => {
           try {
-            console.log('[WorkOrders] Changing status', { orderId, from: currentStatus, to: option.value });
-            await updateWorkOrderStatus(orderId, option.value);
-            Alert.alert('Éxito', 'Estado actualizado');
+            await updateWorkOrderStatus(order.id, nextStatus);
           } catch (error) {
-            let errorMessage = 'No se pudo cambiar el estado';
-            if (error instanceof Error) {
-              errorMessage = error.message;
-            } else if (error && typeof error === 'object' && 'message' in error) {
-              errorMessage = String((error as any).message);
-            } else if (typeof error === 'string') {
-              errorMessage = error;
-            } else {
-              errorMessage = `Error al cambiar estado: ${JSON.stringify(error)}`;
-            }
             console.error('[WorkOrders] Error changing status:', error);
-            Alert.alert('Error', errorMessage);
+            Alert.alert('Error', error instanceof Error ? error.message : 'No se pudo cambiar el estado');
           }
         },
-      }))
-    );
+      },
+    ]);
   };
 
   const handleOpenModal = () => {
@@ -551,6 +605,7 @@ export default function WorkOrdersScreen() {
         console.log('[WorkOrders] Updating order', { orderId: editingOrderId, totalCost });
         await updateWorkOrder(editingOrderId, {
           vehicleId: formData.vehicleId,
+          workshopId: getVehicleById(formData.vehicleId)?.workshopId,
           description: descriptionFromDiagnosis,
           diagnosisCategoryId: formData.diagnosisCategoryId || undefined,
           diagnosisIssueId: formData.diagnosisIssueId || undefined,
@@ -567,6 +622,7 @@ export default function WorkOrdersScreen() {
         console.log('[WorkOrders] Creating order', { vehicleId: formData.vehicleId, assignedTo: formData.assignedTo });
         await addWorkOrder({
           vehicleId: formData.vehicleId,
+          workshopId: getVehicleById(formData.vehicleId)?.workshopId,
           description: descriptionFromDiagnosis,
           diagnosisCategoryId: formData.diagnosisCategoryId || undefined,
           diagnosisIssueId: formData.diagnosisIssueId || undefined,
@@ -574,6 +630,8 @@ export default function WorkOrdersScreen() {
           diagnosis: diagnosisSummary,
           priority: formData.priority,
           status: 'pending',
+          approvalRequired: false,
+          approvalStatus: 'not_required',
           items: formData.items,
           createdBy: user?.id || '',
           assignedTo: formData.assignedTo,
@@ -599,14 +657,90 @@ export default function WorkOrdersScreen() {
   };
 
   const handleOpenBreakdownModal = (order: WorkOrder) => {
-    if (!canManageBreakdown(order)) {
+    if (!canManageBreakdown()) {
       Alert.alert('Rol restringido', 'No puedes editar el desglose de esta orden');
       return;
     }
     console.log('[WorkOrders] Opening breakdown editor', { orderId: order.id });
+    const existingItems = cloneItems(order.items);
+    const linkedActivityIds = new Set(existingItems.map((item) => item.workLogId).filter(Boolean));
+    const activityItems = getWorkLogsForOrder(order.id)
+      .filter((log) => !linkedActivityIds.has(log.id))
+      .map((log) => ({
+        ...createEmptyItem(),
+        id: `activity-${log.id}`,
+        workLogId: log.id,
+        description: log.description,
+      }));
     setBreakdownOrder(order);
-    setBreakdownItems(order.items.length ? cloneItems(order.items) : [createEmptyItem()]);
+    setBreakdownItems([...existingItems, ...activityItems].length ? [...existingItems, ...activityItems] : [createEmptyItem()]);
     setBreakdownModalVisible(true);
+  };
+
+  const handleOpenActivityModal = (order: WorkOrder) => {
+    if (!canRegisterActivity(order)) {
+      Alert.alert('Rol restringido', 'Solo puedes registrar actividades en órdenes asignadas a ti.');
+      return;
+    }
+    setActivityOrder(order);
+    const existingActivities: ActivityDraft[] = getWorkLogsForOrder(order.id).map((log) => ({
+      id: log.id,
+      workLogId: log.id,
+      description: log.description,
+      initialDescription: log.description,
+    }));
+    setActivityDrafts(existingActivities.length ? existingActivities : [createActivityDraft()]);
+    setActivityModalVisible(true);
+  };
+
+  const handleSaveActivity = async () => {
+    if (!activityOrder) return;
+    const existingActivities = activityDrafts.filter((activity) => activity.workLogId);
+    const newDescriptions = activityDrafts
+      .filter((activity) => !activity.workLogId)
+      .map((activity) => activity.description.trim())
+      .filter(Boolean);
+    if (existingActivities.some((activity) => !activity.description.trim()) || (existingActivities.length === 0 && newDescriptions.length === 0)) {
+      Alert.alert('Actividad requerida', 'Describe el trabajo que realizaste.');
+      return;
+    }
+    try {
+      await Promise.all(existingActivities
+        .filter((activity) => activity.description.trim() !== activity.initialDescription)
+        .map((activity) => updateWorkLog(activity.workLogId!, activity.description)));
+      await Promise.all(newDescriptions.map((description) => addWorkLog(activityOrder.id, description)));
+      if (activityOrder.status === 'pending') {
+        await updateWorkOrderStatus(activityOrder.id, 'in_progress');
+      }
+      Alert.alert(
+        'Éxito',
+        activityOrder.status === 'pending'
+          ? 'Actividades registradas. La orden quedó En proceso.'
+          : 'Actividades actualizadas correctamente.',
+      );
+      setActivityModalVisible(false);
+      setActivityOrder(null);
+      setActivityDrafts([createActivityDraft()]);
+    } catch (error) {
+      console.error('[WorkOrders] Error saving activity:', error);
+      Alert.alert('Error', 'No se pudo registrar la actividad.');
+    }
+  };
+
+  const handleActivityDraftChange = (activityId: string, description: string) => {
+    setActivityDrafts((current) => current.map((activity) =>
+      activity.id === activityId ? { ...activity, description } : activity
+    ));
+  };
+
+  const handleAddActivityDraft = () => {
+    setActivityDrafts((current) => [...current, createActivityDraft()]);
+  };
+
+  const handleRemoveActivityDraft = (activityId: string) => {
+    setActivityDrafts((current) =>
+      current.length === 1 ? current : current.filter((activity) => activity.id !== activityId)
+    );
   };
 
   const handleCloseBreakdownModal = () => {
@@ -717,7 +851,7 @@ export default function WorkOrdersScreen() {
       {items.map((item, index) => (
         <View key={item.id} style={styles.itemEditorCard}>
           <View style={styles.itemEditorHeader}>
-            <Text style={styles.itemEditorLabel}>Trabajo #{index + 1}</Text>
+            <Text style={styles.itemEditorLabel}>{item.workLogId ? `Actividad #${index + 1}` : `Rubro #${index + 1}`}</Text>
             <TouchableOpacity
               onPress={() => onRemove(item.id)}
               style={styles.itemRemoveButton}
@@ -770,29 +904,25 @@ export default function WorkOrdersScreen() {
     const vehicle = getVehicleById(order.vehicleId);
     const assignedMechanic = order.assignedTo ? getUserById(order.assignedTo) : null;
     const isSending = sendingId === order.id;
-    const canUpdateOrderStatus = canManageBreakdown(order);
-
+    const activityLogs = getWorkLogsForOrder(order.id);
+    const workflowIndex = WORKFLOW_STEPS.findIndex((step) => step.status === order.status);
+    const availableTransitions = canManageOrders
+      ? getManagerTransitions(order.status, order.approvalStatus)
+      : viewOnlyAssigned && order.assignedTo === user?.id && order.status === 'pending'
+        ? (isStartAuthorized(order.approvalStatus) ? ['in_progress'] : [])
+        : canRegisterActivity(order) && activityLogs.length > 0
+          ? ['technical_review']
+          : [];
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.headerLeft}>
             <Text style={styles.orderCode}>{order.code}</Text>
-            <TouchableOpacity
-              onPress={() => canUpdateOrderStatus && handleChangeStatus(order.id, order.status)}
-              disabled={!canUpdateOrderStatus}
-            >
-              <View
-                style={[
-                  styles.statusBadge,
-                  { backgroundColor: `${getStatusColor(order.status)}20` },
-                  !canUpdateOrderStatus && styles.statusBadgeDisabled,
-                ]}
-              >
-                <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
-                  {getStatusText(order.status)}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(order.status)}20` }]}>
+              <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
+                {getStatusText(order.status)}
+              </Text>
+            </View>
           </View>
 
           {canManageOrders && (
@@ -836,6 +966,68 @@ export default function WorkOrdersScreen() {
 
         <Text style={styles.description}>{order.description}</Text>
 
+        {order.approvalRequired && (
+          <View style={[styles.approvalBadge, { backgroundColor: `${getApprovalColor(order.approvalStatus)}16` }]}>
+            <FileText size={15} color={getApprovalColor(order.approvalStatus)} />
+            <Text style={[styles.approvalBadgeText, { color: getApprovalColor(order.approvalStatus) }]}>
+              {getApprovalLabel(order)}
+            </Text>
+          </View>
+        )}
+
+        {order.status === 'cancelled' ? (
+          <View style={styles.cancelledWorkflowBox}>
+            <Text style={styles.cancelledWorkflowText}>Esta orden fue cancelada.</Text>
+          </View>
+        ) : (
+          <View style={styles.workflowBox}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workflowRail}>
+              {WORKFLOW_STEPS.map((step, index) => {
+                const isCurrent = step.status === order.status;
+                const isDone = workflowIndex > index;
+                const canSelect = availableTransitions.includes(step.status);
+                return (
+                  <TouchableOpacity
+                    key={step.status}
+                    style={styles.workflowStep}
+                    disabled={!canSelect}
+                    onPress={() => handleStatusTransition(order, step.status)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Estado ${step.label}`}
+                  >
+                    <View style={styles.workflowTrack}>
+                      {index > 0 && (
+                        <View style={[styles.workflowLine, isDone && styles.workflowLineDone]} />
+                      )}
+                      <View style={[
+                        styles.workflowDot,
+                        isDone && styles.workflowDotDone,
+                        isCurrent && styles.workflowDotCurrent,
+                        canSelect && styles.workflowDotSelectable,
+                      ]}>
+                        <Text style={[styles.workflowDotText, (isDone || isCurrent) && styles.workflowDotTextActive]}>
+                          {isDone ? '✓' : index + 1}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.workflowLabel, isCurrent && styles.workflowLabelCurrent]} numberOfLines={2}>
+                      {step.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {canManageOrders && availableTransitions.includes('cancelled') && (
+              <TouchableOpacity
+                style={styles.cancelOrderButton}
+                onPress={() => handleStatusTransition(order, 'cancelled')}
+              >
+                <Text style={styles.cancelOrderButtonText}>Cancelar orden</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {order.diagnosis && (
           <View style={styles.diagnosisSection}>
             <Text style={styles.diagnosisLabel}>Diagnóstico:</Text>
@@ -860,51 +1052,73 @@ export default function WorkOrdersScreen() {
           </View>
         ) : (
           <View style={styles.emptyItemsBox}>
-            <Text style={styles.emptyItemsText}>El mecánico aún no registra trabajos.</Text>
+            <Text style={styles.emptyItemsText}>El técnico aún no ha registrado rubros.</Text>
           </View>
         )}
 
-        {canManageBreakdown(order) && (
+        {activityLogs.length > 0 && (
+          <View style={styles.itemsSection}>
+            <Text style={styles.itemsLabel}>Actividades realizadas ({activityLogs.length}):</Text>
+            {activityLogs.slice(0, 3).map((log) => (
+              <Text key={log.id} style={styles.itemDescription}>• {log.description}</Text>
+            ))}
+          </View>
+        )}
+
+        {canManageBreakdown() && (
           <TouchableOpacity
             style={styles.breakdownButton}
             onPress={() => handleOpenBreakdownModal(order)}
             testID={`open-breakdown-${order.id}`}
           >
             <ClipboardList size={18} color="#2563eb" />
-            <Text style={styles.breakdownButtonText}>Registrar trabajos</Text>
+            <Text style={styles.breakdownButtonText}>Gestionar rubros</Text>
           </TouchableOpacity>
         )}
 
-        <View style={styles.footer}>
-          <View style={styles.totalSection}>
-            <Text style={styles.totalLabel}>Total:</Text>
-            <Text style={styles.totalAmount}>${order.totalCost.toFixed(2)}</Text>
-          </View>
+        {canRegisterActivity(order) && (
+          <TouchableOpacity
+            style={styles.breakdownButton}
+            onPress={() => handleOpenActivityModal(order)}
+            testID={`open-activity-${order.id}`}
+          >
+            <ClipboardList size={18} color="#2563eb" />
+            <Text style={styles.breakdownButtonText}>Registrar actividad realizada</Text>
+          </TouchableOpacity>
+        )}
 
-          <View style={styles.actions}>
-            {order.items.length > 0 && order.status !== 'completed' && (
+        {canManageOrders && (
+          <View style={styles.footer}>
+            <View style={styles.totalSection}>
+              <Text style={styles.totalLabel}>Total:</Text>
+              <Text style={styles.totalAmount}>${order.totalCost.toFixed(2)}</Text>
+            </View>
+
+            <View style={styles.actions}>
+              {order.items.length > 0 && !['completed', 'cancelled'].includes(order.status) && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.budgetButton, isSending && styles.buttonDisabled]}
+                  onPress={() => handleSendBudget(order.id)}
+                  disabled={isSending}
+                >
+                  <FileText size={16} color="#fff" />
+                  <Text style={styles.actionButtonText}>Solicitar aprobación</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
-                style={[styles.actionButton, styles.budgetButton, isSending && styles.buttonDisabled]}
-                onPress={() => handleSendBudget(order.id)}
+                style={[styles.actionButton, styles.statusButton, isSending && styles.buttonDisabled]}
+                onPress={() => handleSendStatusUpdate(order.id)}
                 disabled={isSending}
               >
-                <FileText size={16} color="#fff" />
-                <Text style={styles.actionButtonText}>Enviar Presupuesto</Text>
+                <MessageCircle size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>
+                  {isSending ? 'Enviando...' : 'Notificar Estado'}
+                </Text>
               </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.statusButton, isSending && styles.buttonDisabled]}
-              onPress={() => handleSendStatusUpdate(order.id)}
-              disabled={isSending}
-            >
-              <MessageCircle size={16} color="#fff" />
-              <Text style={styles.actionButtonText}>
-                {isSending ? 'Enviando...' : 'Notificar Estado'}
-              </Text>
-            </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.timelineSection}>
           <View style={styles.timelineRow}>
@@ -957,14 +1171,6 @@ export default function WorkOrdersScreen() {
         )}
       </View>
 
-      {viewOnlyAssigned && (
-        <View style={styles.permissionBanner}>
-          <ShieldAlert size={18} color="#1d4ed8" />
-          <Text style={styles.permissionText}>
-            Solo puedes ver y enviar actualizaciones de las órdenes que te asignaron.
-          </Text>
-        </View>
-      )}
       <FlatList
         data={filteredOrders}
         renderItem={renderWorkOrder}
@@ -1395,7 +1601,7 @@ export default function WorkOrdersScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalTitle}>Registrar trabajos</Text>
+              <Text style={styles.modalTitle}>Gestionar rubros</Text>
               {breakdownOrder && (
                 <View style={styles.breakdownSummary}>
                   <Text style={styles.breakdownSummaryText}>{breakdownOrder.code}</Text>
@@ -1434,6 +1640,78 @@ export default function WorkOrdersScreen() {
                   testID="save-breakdown-button"
                 >
                   <Text style={styles.submitButtonText}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={activityModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setActivityModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>Gestionar actividades</Text>
+              {activityOrder && (
+                <View style={styles.breakdownSummary}>
+                  <Text style={styles.breakdownSummaryText}>{activityOrder.code}</Text>
+                  <Text style={styles.breakdownSummarySubtext}>{activityOrder.description}</Text>
+                </View>
+              )}
+              <Text style={styles.inputLabel}>Actividades realizadas</Text>
+              {activityDrafts.map((activity, index) => (
+                <View key={activity.id} style={styles.activityDraftCard}>
+                  <View style={styles.itemEditorHeader}>
+                    <Text style={styles.itemEditorLabel}>Actividad #{index + 1}</Text>
+                    {!activity.workLogId && activityDrafts.length > 1 && (
+                      <TouchableOpacity
+                        onPress={() => handleRemoveActivityDraft(activity.id)}
+                        style={styles.itemRemoveButton}
+                        testID={`remove-work-activity-${activity.id}`}
+                      >
+                        <Trash2 size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <TextInput
+                    style={[styles.textInput, styles.notesInput]}
+                    value={activity.description}
+                    onChangeText={(text) => handleActivityDraftChange(activity.id, text)}
+                    placeholder="Ej.: Se desmontó la rueda, se reemplazaron las pastillas y se probó el frenado."
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    numberOfLines={4}
+                    testID={`work-activity-description-${activity.id}`}
+                  />
+                </View>
+              ))}
+              <TouchableOpacity
+                style={styles.addItemButton}
+                onPress={handleAddActivityDraft}
+                testID="add-work-activity"
+              >
+                <Plus size={18} color="#2563eb" />
+                <Text style={styles.addItemButtonText}>Agregar actividad</Text>
+              </TouchableOpacity>
+              <Text style={styles.fieldHint}>Las actividades se muestran por fecha de creación. Puedes corregir las existentes y agregar nuevas.</Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setActivityModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.submitButton]}
+                  onPress={handleSaveActivity}
+                  testID="save-work-activity"
+                >
+                  <Text style={styles.submitButtonText}>Guardar actividades</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -1551,6 +1829,129 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600' as const,
   },
+  workflowBox: {
+    marginBottom: 10,
+    paddingVertical: 8,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  workflowHeading: {
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  workflowTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#1e293b',
+  },
+  workflowSubtitle: {
+    marginTop: 3,
+    fontSize: 11,
+    color: '#64748b',
+  },
+  workflowRail: {
+    paddingHorizontal: 6,
+  },
+  workflowStep: {
+    width: 68,
+    alignItems: 'center',
+  },
+  workflowTrack: {
+    width: '100%',
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  workflowLine: {
+    position: 'absolute',
+    right: '50%',
+    top: 12,
+    width: '100%',
+    height: 3,
+    backgroundColor: '#cbd5e1',
+  },
+  workflowLineDone: {
+    backgroundColor: '#2563eb',
+  },
+  workflowDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#cbd5e1',
+  },
+  workflowDotDone: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  workflowDotCurrent: {
+    borderColor: '#2563eb',
+    backgroundColor: '#eff6ff',
+  },
+  workflowDotSelectable: {
+    borderColor: '#0ea5e9',
+  },
+  workflowDotText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#64748b',
+  },
+  workflowDotTextActive: {
+    color: '#1d4ed8',
+  },
+  workflowLabel: {
+    marginTop: 3,
+    minHeight: 24,
+    paddingHorizontal: 2,
+    fontSize: 9,
+    lineHeight: 12,
+    textAlign: 'center',
+    color: '#64748b',
+  },
+  workflowLabelCurrent: {
+    color: '#1d4ed8',
+    fontWeight: '700' as const,
+  },
+  workflowHint: {
+    marginTop: 10,
+    marginHorizontal: 12,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#dbeafe',
+    color: '#1e3a8a',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  cancelOrderButton: {
+    alignSelf: 'flex-end',
+    marginTop: 10,
+    marginRight: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  cancelOrderButtonText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+  cancelledWorkflowBox: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  cancelledWorkflowText: {
+    color: '#b91c1c',
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
   vehicleSection: {
     marginBottom: 12,
   },
@@ -1589,6 +1990,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1f2937',
     marginBottom: 12,
+  },
+  approvalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  approvalBadgeText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
   },
   diagnosisSection: {
     backgroundColor: '#fef3c7',
@@ -1788,6 +2203,14 @@ const styles = StyleSheet.create({
   notesInput: {
     minHeight: 64,
     textAlignVertical: 'top',
+  },
+  activityDraftCard: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
   },
   fieldHint: {
     fontSize: 12,

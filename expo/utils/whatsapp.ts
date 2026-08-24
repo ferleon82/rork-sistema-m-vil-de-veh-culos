@@ -36,9 +36,9 @@ export const formatWorkOrderMessage = (workOrder: WorkOrder, vehicle: Vehicle, t
     const statusText = {
       pending: 'Pendiente',
       in_progress: 'En Progreso',
-      waiting_approval: 'Esperando Aprobación',
-      approved: 'Aprobado',
-      completed: 'Completado',
+      technical_review: 'En revisión técnica',
+      ready_for_delivery: 'Listo para entrega',
+      completed: 'Entregado / Cerrado',
       cancelled: 'Cancelado',
     }[workOrder.status];
 
@@ -88,5 +88,21 @@ export const sendStatusUpdate = async (workOrder: WorkOrder, vehicle: Vehicle) =
 
 export const sendBudget = async (workOrder: WorkOrder, vehicle: Vehicle) => {
   const message = formatWorkOrderMessage(workOrder, vehicle, 'budget');
+  return await sendWhatsAppMessage(vehicle.ownerPhone, message);
+};
+
+export const sendBudgetApproval = async (workOrder: WorkOrder, vehicle: Vehicle, approvalUrl: string) => {
+  const message = `💰 *Aprobación de presupuesto*
+
+Hola ${vehicle.ownerName},
+
+El taller preparó el presupuesto de la orden *${workOrder.code}* para tu vehículo *${vehicle.brand} ${vehicle.model}* (${vehicle.plate}).
+
+Total propuesto: *$${workOrder.totalCost.toFixed(2)}*
+
+Revisa y aprueba o rechaza cada trabajo o repuesto desde este enlace seguro:
+${approvalUrl}
+
+El enlace vence en 7 días. Gracias por tu confianza.`;
   return await sendWhatsAppMessage(vehicle.ownerPhone, message);
 };

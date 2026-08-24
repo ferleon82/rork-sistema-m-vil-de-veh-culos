@@ -19,7 +19,7 @@ import { Plus, Search, User, Phone, Mail, MapPin, FileText, X, Trash2, Edit, Glo
 
 export default function ClientsScreen() {
   const { clients, addClient, updateClient, deleteClient, searchClients, getClientsByWorkshop } = useClients();
-  const { permissions, isAdmin } = useAuth();
+  const { permissions, isAdmin, user: currentUser } = useAuth();
   const { workshops } = useWorkshops();
   const canManageClients = permissions.canManageClients;
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,6 +79,9 @@ export default function ClientsScreen() {
 
   const openAddModal = () => {
     resetForm();
+    if (!isAdmin && currentUser?.workshopId) {
+      setFormData((current) => ({ ...current, workshopId: currentUser.workshopId }));
+    }
     setModalVisible(true);
   };
 
@@ -103,6 +106,16 @@ export default function ClientsScreen() {
       return;
     }
 
+    // Technicians never choose a workshop: their authenticated profile is the
+    // source of truth. Administrators must explicitly select one.
+    const workshopId = isAdmin ? formData.workshopId : currentUser?.workshopId;
+    if (!workshopId) {
+      Alert.alert('Mecánica requerida', isAdmin
+        ? 'Selecciona la mecánica a la que pertenece el cliente.'
+        : 'Tu usuario técnico no tiene una mecánica asignada. Contacta al administrador.');
+      return;
+    }
+
     try {
       if (editingClient) {
         await updateClient(editingClient.id, {
@@ -113,7 +126,7 @@ export default function ClientsScreen() {
           address: formData.address || undefined,
           documentNumber: formData.documentNumber || undefined,
           notes: formData.notes || undefined,
-          workshopId: formData.workshopId,
+          workshopId,
         });
         Alert.alert('Éxito', 'Cliente actualizado correctamente');
       } else {
@@ -125,7 +138,7 @@ export default function ClientsScreen() {
           address: formData.address || undefined,
           documentNumber: formData.documentNumber || undefined,
           notes: formData.notes || undefined,
-          workshopId: formData.workshopId,
+          workshopId,
         });
         Alert.alert('Éxito', 'Cliente creado correctamente');
       }
@@ -508,11 +521,8 @@ export default function ClientsScreen() {
               </TouchableOpacity>
             </View>
             <FlatList
-              data={[
-                { id: undefined, name: 'Sin asignar' },
-                ...workshops,
-              ]}
-              keyExtractor={(item) => item.id || 'unassigned'}
+              data={workshops}
+              keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[

@@ -40,16 +40,23 @@ export const [ClientsProvider, useClients] = createContextHook(() => {
 
   useEffect(() => {
     if (currentUser) {
-      loadClients();
+      void loadClients();
+    } else {
+      setClients([]);
+      setIsLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.role, currentUser?.workshopId]);
 
   const loadClients = async () => {
     try {
       setIsLoading(true);
       let query = supabase.from('clients').select('*');
-      
-      if (currentUser?.role === 'technician' && currentUser.workshopId) {
+
+      if (currentUser?.role === 'technician') {
+        if (!currentUser.workshopId) {
+          setClients([]);
+          return;
+        }
         query = query.eq('workshop_id', currentUser.workshopId);
       }
       

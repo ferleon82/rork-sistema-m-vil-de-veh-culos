@@ -124,17 +124,6 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Credenciales de Demo</Text>
-        
-        <View style={styles.credentialsCard}>
-          <Text style={styles.credentialText}>📧 Admin: admin@taller.com</Text>
-          <Text style={styles.credentialText}>📧 Técnico: tecnico@taller.com</Text>
-          <Text style={styles.credentialText}>📧 Mecánico: mecanico@taller.com</Text>
-          <Text style={styles.credentialText}>🔐 Contraseña: admin123</Text>
-        </View>
-      </View>
-
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <LogOut size={20} color="#dc2626" />
         <Text style={styles.logoutText}>Cerrar Sesión</Text>
@@ -289,19 +278,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6b7280',
     lineHeight: 18,
-  },
-  credentialsCard: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#fbbf24',
-    gap: 8,
-  },
-  credentialText: {
-    fontSize: 13,
-    color: '#78350f',
-    fontFamily: 'monospace',
   },
   logoutButton: {
     flexDirection: 'row',

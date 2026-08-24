@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -11,26 +10,19 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Wrench, Mail, Lock } from 'lucide-react-native';
+import { Wrench } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const { login } = useAuth();
+  const { loginWithGoogle } = useAuth();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Por favor ingresa tu email y contraseña');
-      return;
-    }
-
+  const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      const result = await login(email, password);
+      const result = await loginWithGoogle();
       if (!result.success) {
-        Alert.alert('Error de autenticación', result.error || 'Credenciales incorrectas');
+        Alert.alert('Error de autenticación', result.error || 'No se pudo iniciar sesión con Google');
       }
     } catch (error) {
       Alert.alert('Error', 'Ocurrió un error inesperado al iniciar sesión');
@@ -57,52 +49,22 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Mail size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
-                editable={!isLoading}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Lock size={20} color="#666" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="password"
-                editable={!isLoading}
-              />
-            </View>
-
             <TouchableOpacity
               style={[styles.button, isLoading && styles.buttonDisabled]}
-              onPress={handleLogin}
+              onPress={handleGoogleLogin}
               disabled={isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Iniciar Sesión</Text>
+                <Text style={styles.buttonText}>Continuar con Google</Text>
               )}
             </TouchableOpacity>
 
-            <View style={styles.demoInfo}>
-              <Text style={styles.demoTitle}>Cuentas de prueba:</Text>
-              <Text style={styles.demoText}>Admin: admin@taller.com</Text>
-              <Text style={styles.demoText}>Técnico: tecnico@taller.com</Text>
-              <Text style={styles.demoText}>Mecánico: mecanico@taller.com</Text>
-              <Text style={styles.demoText}>Contraseña: admin123</Text>
-            </View>
+            <Text style={styles.helperText}>
+              Usa la cuenta de Google autorizada por el administrador.
+            </Text>
+
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -153,29 +115,6 @@ const styles = StyleSheet.create({
   form: {
     gap: 16,
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    height: 56,
-    fontSize: 16,
-    color: '#1f2937',
-  },
   button: {
     backgroundColor: '#2563eb',
     borderRadius: 12,
@@ -197,23 +136,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
   },
-  demoInfo: {
-    marginTop: 32,
-    padding: 16,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#fbbf24',
-  },
-  demoTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#92400e',
-    marginBottom: 8,
-  },
-  demoText: {
+  helperText: {
+    color: '#6b7280',
     fontSize: 13,
-    color: '#78350f',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

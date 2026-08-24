@@ -40,7 +40,6 @@ export default function DashboardScreen() {
   const stats = useMemo(() => {
     const pending = scopedOrders.filter((wo) => wo.status === 'pending').length;
     const inProgress = scopedOrders.filter((wo) => wo.status === 'in_progress').length;
-    const waitingApproval = scopedOrders.filter((wo) => wo.status === 'waiting_approval').length;
     const completed = scopedOrders.filter((wo) => wo.status === 'completed').length;
     const totalRevenue = scopedOrders
       .filter((wo) => wo.status === 'completed')
@@ -49,7 +48,6 @@ export default function DashboardScreen() {
     return {
       pending,
       inProgress,
-      waitingApproval,
       completed,
       totalRevenue,
     };
@@ -77,8 +75,8 @@ export default function DashboardScreen() {
     const statusCounts: Record<WorkOrderStatus, number> = {
       pending: 0,
       in_progress: 0,
-      waiting_approval: 0,
-      approved: 0,
+      technical_review: 0,
+      ready_for_delivery: 0,
       completed: 0,
       cancelled: 0,
     };
@@ -142,8 +140,8 @@ export default function DashboardScreen() {
     const colors: Record<string, string> = {
       pending: '#f59e0b',
       in_progress: '#3b82f6',
-      waiting_approval: '#8b5cf6',
-      approved: '#10b981',
+      technical_review: '#f97316',
+      ready_for_delivery: '#14b8a6',
       completed: '#059669',
       cancelled: '#ef4444',
     };
@@ -154,8 +152,8 @@ export default function DashboardScreen() {
     const texts: Record<string, string> = {
       pending: 'Pendiente',
       in_progress: 'En Progreso',
-      waiting_approval: 'Esperando Aprobación',
-      approved: 'Aprobado',
+      technical_review: 'Revisión técnica',
+      ready_for_delivery: 'Listo para entrega',
       completed: 'Completado',
       cancelled: 'Cancelado',
     };
@@ -270,8 +268,8 @@ export default function DashboardScreen() {
                   Activas{' '}
                   {diagnosticsStats.statusCounts.pending +
                     diagnosticsStats.statusCounts.in_progress +
-                    diagnosticsStats.statusCounts.waiting_approval +
-                    diagnosticsStats.statusCounts.approved}
+                    diagnosticsStats.statusCounts.technical_review +
+                    diagnosticsStats.statusCounts.ready_for_delivery}
                 </Text>
               </View>
 

@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS clients (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create users table (custom users, not auth.users)
+-- Application profiles. Credentials are managed exclusively by auth.users.
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT UNIQUE NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
     role user_role NOT NULL DEFAULT 'mechanic',
     country_code TEXT NOT NULL,
     phone TEXT,
-    password TEXT NOT NULL,
+    auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
     client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
     workshop_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -193,13 +193,6 @@ DROP TRIGGER IF EXISTS update_budgets_updated_at ON budgets;
 CREATE TRIGGER update_budgets_updated_at BEFORE UPDATE ON budgets
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert initial users (password: admin123)
-INSERT INTO users (email, name, role, country_code, phone, password) VALUES
-('admin@taller.com', 'Administrador', 'admin', 'EC', '+59312345678', 'admin123'),
-('tecnico@taller.com', 'Técnico Juan', 'technician', 'EC', '+59387654321', 'admin123'),
-('mecanico@taller.com', 'Mecánico Pedro', 'mechanic', 'EC', '+59399887766', 'admin123')
-ON CONFLICT (email) DO NOTHING;
-
 -- Enable Row Level Security (RLS)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
@@ -209,9 +202,10 @@ ALTER TABLE work_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies (allow all operations for now - you can customize later)
+-- RLS policies. User provisioning is performed only through the manage-users Edge Function.
 DROP POLICY IF EXISTS "Allow all operations on users" ON users;
-CREATE POLICY "Allow all operations on users" ON users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Users can view their own profile" ON users FOR SELECT TO authenticated
+USING (auth_user_id = auth.uid());
 
 DROP POLICY IF EXISTS "Allow all operations on clients" ON clients;
 CREATE POLICY "Allow all operations on clients" ON clients FOR ALL USING (true) WITH CHECK (true);

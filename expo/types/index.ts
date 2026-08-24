@@ -20,7 +20,6 @@ export interface User {
   role: UserRole;
   countryCode: string;
   phone?: string;
-  password: string;
   clientId?: string;
   workshopId?: string;
 }
@@ -28,7 +27,7 @@ export interface User {
 export interface Workshop {
   id: string;
   name: string;
-  ownerId: string;
+  ownerId?: string | null;
   countryCode: string;
   phone?: string;
   address?: string;
@@ -50,25 +49,40 @@ export interface Vehicle {
   ownerPhone: string;
   ownerEmail?: string;
   photoUrl?: string;
+  workshopId?: string;
   createdAt: string;
 }
 
-export type WorkOrderStatus = 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled';
+export type WorkOrderStatus = 'pending' | 'in_progress' | 'technical_review' | 'ready_for_delivery' | 'completed' | 'cancelled';
+export type ApprovalStatus = 'not_required' | 'draft' | 'pending' | 'approved' | 'partial' | 'rejected' | 'expired' | 'revoked';
 
 export interface WorkOrderItem {
   id: string;
+  /** Links a billable item to the mechanic activity that originated it. */
+  workLogId?: string;
   description: string;
   quantity: number;
   unitPrice: number;
   total: number;
 }
 
+export interface WorkLog {
+  id: string;
+  workOrderId: string;
+  mechanicId: string;
+  description: string;
+  createdAt: string;
+}
+
 export interface WorkOrder {
   id: string;
   code: string;
   vehicleId: string;
+  workshopId?: string;
   vehicle?: Vehicle;
   status: WorkOrderStatus;
+  approvalRequired: boolean;
+  approvalStatus: ApprovalStatus;
   priority: 'low' | 'medium' | 'high';
   description: string;
   diagnosis?: string;
@@ -108,4 +122,46 @@ export interface Notification {
   phoneNumber: string;
   sentAt: string;
   delivered: boolean;
+}
+
+export type InternalNotificationType =
+  | 'order_assigned'
+  | 'work_started'
+  | 'review_requested'
+  | 'work_returned'
+  | 'ready_for_delivery'
+  | 'order_closed'
+  | 'order_cancelled'
+  | 'budget_approved'
+  | 'budget_rejected'
+  | 'budget_partial'
+  | 'approval_required';
+
+export interface UserNotification {
+  id: string;
+  recipientUserId: string;
+  actorUserId?: string;
+  workshopId: string;
+  workOrderId?: string;
+  type: InternalNotificationType;
+  title: string;
+  body: string;
+  metadata?: Record<string, unknown>;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface BudgetApproval {
+  id: string;
+  workOrderId: string;
+  workshopId: string;
+  version: number;
+  status: Exclude<ApprovalStatus, 'not_required'>;
+  items: WorkOrderItem[];
+  totalCost: number;
+  notes?: string;
+  expiresAt?: string;
+  sentAt?: string;
+  respondedAt?: string;
+  clientComment?: string;
 }

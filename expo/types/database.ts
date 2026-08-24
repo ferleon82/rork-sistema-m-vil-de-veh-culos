@@ -17,7 +17,7 @@ export interface Database {
           role: 'admin' | 'technician' | 'mechanic'
           country_code: string
           phone: string | null
-          password: string
+          auth_user_id: string | null
           client_id: string | null
           workshop_id: string | null
           created_at: string
@@ -30,7 +30,7 @@ export interface Database {
           role: 'admin' | 'technician' | 'mechanic'
           country_code: string
           phone?: string | null
-          password: string
+          auth_user_id?: string | null
           client_id?: string | null
           workshop_id?: string | null
           created_at?: string
@@ -43,7 +43,7 @@ export interface Database {
           role?: 'admin' | 'technician' | 'mechanic'
           country_code?: string
           phone?: string | null
-          password?: string
+          auth_user_id?: string | null
           client_id?: string | null
           workshop_id?: string | null
           updated_at?: string
@@ -93,7 +93,7 @@ export interface Database {
         Row: {
           id: string
           name: string
-          owner_id: string
+          owner_id: string | null
           country_code: string
           phone: string | null
           address: string | null
@@ -105,7 +105,7 @@ export interface Database {
         Insert: {
           id?: string
           name: string
-          owner_id: string
+          owner_id?: string | null
           country_code: string
           phone?: string | null
           address?: string | null
@@ -117,7 +117,7 @@ export interface Database {
         Update: {
           id?: string
           name?: string
-          owner_id?: string
+          owner_id?: string | null
           country_code?: string
           phone?: string | null
           address?: string | null
@@ -140,6 +140,7 @@ export interface Database {
           owner_phone: string
           owner_email: string | null
           photo_url: string | null
+          workshop_id: string | null
           created_at: string
           updated_at: string
         }
@@ -156,6 +157,7 @@ export interface Database {
           owner_phone: string
           owner_email?: string | null
           photo_url?: string | null
+          workshop_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -172,6 +174,7 @@ export interface Database {
           owner_phone?: string
           owner_email?: string | null
           photo_url?: string | null
+          workshop_id?: string | null
           updated_at?: string
         }
       }
@@ -180,7 +183,10 @@ export interface Database {
           id: string
           code: string
           vehicle_id: string
-          status: 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled'
+          workshop_id: string | null
+          status: 'pending' | 'diagnosis' | 'in_progress' | 'waiting_approval' | 'approved' | 'technical_review' | 'ready_for_delivery' | 'completed' | 'cancelled'
+          approval_required: boolean
+          approval_status: 'not_required' | 'draft' | 'pending' | 'approved' | 'partial' | 'rejected' | 'expired' | 'revoked'
           priority: 'low' | 'medium' | 'high'
           description: string
           diagnosis: string | null
@@ -204,7 +210,10 @@ export interface Database {
           id?: string
           code: string
           vehicle_id: string
-          status: 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled'
+          workshop_id?: string | null
+          status: 'pending' | 'diagnosis' | 'in_progress' | 'waiting_approval' | 'approved' | 'technical_review' | 'ready_for_delivery' | 'completed' | 'cancelled'
+          approval_required?: boolean
+          approval_status?: 'not_required' | 'draft' | 'pending' | 'approved' | 'partial' | 'rejected' | 'expired' | 'revoked'
           priority: 'low' | 'medium' | 'high'
           description: string
           diagnosis?: string | null
@@ -228,7 +237,10 @@ export interface Database {
           id?: string
           code?: string
           vehicle_id?: string
-          status?: 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled'
+          workshop_id?: string | null
+          status?: 'pending' | 'diagnosis' | 'in_progress' | 'waiting_approval' | 'approved' | 'technical_review' | 'ready_for_delivery' | 'completed' | 'cancelled'
+          approval_required?: boolean
+          approval_status?: 'not_required' | 'draft' | 'pending' | 'approved' | 'partial' | 'rejected' | 'expired' | 'revoked'
           priority?: 'low' | 'medium' | 'high'
           description?: string
           diagnosis?: string | null
@@ -316,16 +328,125 @@ export interface Database {
           delivered?: boolean
         }
       }
+      budget_approvals: {
+        Row: {
+          id: string
+          work_order_id: string
+          workshop_id: string
+          version: number
+          status: 'draft' | 'sent' | 'approved' | 'partial' | 'rejected' | 'expired' | 'revoked'
+          items: Json
+          total_cost: number
+          notes: string | null
+          token_hash: string | null
+          expires_at: string | null
+          sent_at: string | null
+          responded_at: string | null
+          client_comment: string | null
+          decisions: Json | null
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          work_order_id: string
+          workshop_id: string
+          version: number
+          status?: 'draft' | 'sent' | 'approved' | 'partial' | 'rejected' | 'expired' | 'revoked'
+          items: Json
+          total_cost?: number
+          notes?: string | null
+          token_hash?: string | null
+          expires_at?: string | null
+          sent_at?: string | null
+          responded_at?: string | null
+          client_comment?: string | null
+          decisions?: Json | null
+          created_by: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          status?: 'draft' | 'sent' | 'approved' | 'partial' | 'rejected' | 'expired' | 'revoked'
+          sent_at?: string | null
+          responded_at?: string | null
+          client_comment?: string | null
+          decisions?: Json | null
+          updated_at?: string
+        }
+      }
+      user_notifications: {
+        Row: {
+          id: string
+          recipient_user_id: string
+          actor_user_id: string | null
+          workshop_id: string
+          work_order_id: string | null
+          event_key: string
+          type: 'order_assigned' | 'work_started' | 'review_requested' | 'work_returned' | 'ready_for_delivery' | 'order_closed' | 'order_cancelled' | 'budget_approved' | 'budget_rejected' | 'budget_partial' | 'approval_required'
+          title: string
+          body: string
+          metadata: Json
+          read_at: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: { read_at?: string | null }
+      }
+      work_order_events: {
+        Row: {
+          id: string
+          work_order_id: string
+          workshop_id: string
+          actor_user_id: string | null
+          event_type: string
+          previous_status: string | null
+          next_status: string | null
+          detail: Json
+          created_at: string
+        }
+        Insert: never
+        Update: never
+      }
+      work_logs: {
+        Row: {
+          id: string
+          work_order_id: string
+          mechanic_id: string
+          description: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          work_order_id: string
+          mechanic_id: string
+          description: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          work_order_id?: string
+          mechanic_id?: string
+          description?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      transition_work_order_status: {
+        Args: {
+          p_order_id: string
+          p_next_status: Database['public']['Enums']['work_order_status']
+        }
+        Returns: Database['public']['Tables']['work_orders']['Row']
+      }
     }
     Enums: {
       user_role: 'admin' | 'technician' | 'mechanic'
-      work_order_status: 'pending' | 'in_progress' | 'waiting_approval' | 'approved' | 'completed' | 'cancelled'
+      work_order_status: 'pending' | 'diagnosis' | 'in_progress' | 'waiting_approval' | 'approved' | 'technical_review' | 'ready_for_delivery' | 'completed' | 'cancelled'
       work_order_priority: 'low' | 'medium' | 'high'
       notification_type: 'status_update' | 'budget_sent' | 'budget_approved' | 'work_completed'
     }

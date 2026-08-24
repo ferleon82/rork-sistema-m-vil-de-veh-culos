@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { WorkOrder, WorkOrderStatus } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 
 type DbWorkOrder = Database['public']['Tables']['work_orders']['Row'];
 type DbWorkOrderInsert = Database['public']['Tables']['work_orders']['Insert'];
@@ -12,7 +13,15 @@ const mapDbWorkOrderToWorkOrder = (dbWorkOrder: DbWorkOrder): WorkOrder => ({
   id: dbWorkOrder.id,
   code: dbWorkOrder.code,
   vehicleId: dbWorkOrder.vehicle_id,
-  status: dbWorkOrder.status,
+  workshopId: dbWorkOrder.workshop_id || undefined,
+  // Legacy workflow states are treated as pending until migration 017 normalizes them.
+  status: ['diagnosis', 'waiting_approval'].includes(dbWorkOrder.status)
+    ? 'pending'
+    : dbWorkOrder.status === 'approved'
+      ? 'in_progress'
+      : dbWorkOrder.status as WorkOrderStatus,
+  approvalRequired: dbWorkOrder.approval_required,
+  approvalStatus: dbWorkOrder.approval_status,
   priority: dbWorkOrder.priority,
   description: dbWorkOrder.description,
   diagnosis: dbWorkOrder.diagnosis || undefined,
@@ -34,7 +43,10 @@ const mapDbWorkOrderToWorkOrder = (dbWorkOrder: DbWorkOrder): WorkOrder => ({
 
 const mapWorkOrderToDbInsert = (workOrder: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'totalCost'>): Omit<DbWorkOrderInsert, 'code' | 'total_cost'> => ({
   vehicle_id: workOrder.vehicleId,
+  workshop_id: workOrder.workshopId || null,
   status: workOrder.status,
+  approval_required: workOrder.approvalRequired,
+  approval_status: workOrder.approvalStatus,
   priority: workOrder.priority,
   description: workOrder.description,
   diagnosis: workOrder.diagnosis || null,
@@ -53,20 +65,49 @@ const mapWorkOrderToDbInsert = (workOrder: Omit<WorkOrder, 'id' | 'code' | 'crea
 });
 
 export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
+  const { user: currentUser } = useAuth();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    loadWorkOrders();
-  }, []);
+    if (currentUser) {
+      void loadWorkOrders();
+      const channel = supabase
+        .channel(`work-orders-${currentUser.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'work_orders' },
+          () => void loadWorkOrders(),
+        )
+        .subscribe();
+
+      return () => {
+        void supabase.removeChannel(channel);
+      };
+    } else {
+      setWorkOrders([]);
+      setIsLoading(false);
+    }
+  }, [currentUser?.id, currentUser?.role, currentUser?.workshopId]);
 
   const loadWorkOrders = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('work_orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
+
+      if (currentUser?.role === 'technician') {
+        if (!currentUser.workshopId) {
+          setWorkOrders([]);
+          return;
+        }
+        query = query.eq('workshop_id', currentUser.workshopId);
+      } else if (currentUser?.role === 'mechanic') {
+        query = query.eq('assigned_to', currentUser.id);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) {
         console.error('Error loading work orders:', error);
@@ -88,17 +129,12 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
   const addWorkOrder = async (workOrder: Omit<WorkOrder, 'id' | 'code' | 'createdAt' | 'totalCost'>) => {
     try {
       const totalCost = workOrder.items.reduce((sum, item) => sum + item.total, 0);
-      
-      const { count } = await supabase
-        .from('work_orders')
-        .select('*', { count: 'exact', head: true });
-      
-      const orderNumber = (count || 0) + 1;
-      const code = `OT-${new Date().getFullYear()}-${orderNumber.toString().padStart(3, '0')}`;
-      
+
+      // Supabase generates the unique code atomically. Generating it from a
+      // client-side count produces duplicates when records already exist or
+      // two technicians submit at the same time.
       const dbInsert = {
         ...mapWorkOrderToDbInsert(workOrder),
-        code,
         total_cost: totalCost,
       };
       
@@ -132,6 +168,7 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
       console.log('[WorkOrdersContext] Updating work order:', { id, updates });
       const dbUpdate: DbWorkOrderUpdate = {};
       if (updates.vehicleId !== undefined) dbUpdate.vehicle_id = updates.vehicleId;
+      if (updates.workshopId !== undefined) dbUpdate.workshop_id = updates.workshopId || null;
       if (updates.status !== undefined) dbUpdate.status = updates.status;
       if (updates.priority !== undefined) dbUpdate.priority = updates.priority;
       if (updates.description !== undefined) dbUpdate.description = updates.description;
@@ -217,17 +254,18 @@ export const [WorkOrdersProvider, useWorkOrders] = createContextHook(() => {
   };
 
   const updateWorkOrderStatus = async (id: string, status: WorkOrderStatus) => {
-    const updates: Partial<WorkOrder> = { status };
-    
-    if (status === 'in_progress' && !workOrders.find((wo) => wo.id === id)?.startedAt) {
-      updates.startedAt = new Date().toISOString();
+    const { data, error } = await supabase
+      .rpc('transition_work_order_status', { p_order_id: id, p_next_status: status })
+      .single();
+
+    if (error || !data) {
+      throw new Error(error?.message || 'No se pudo actualizar el estado de la orden.');
     }
-    
-    if (status === 'completed') {
-      updates.completedAt = new Date().toISOString();
-    }
-    
-    await updateWorkOrder(id, updates);
+
+    const updatedWorkOrder = mapDbWorkOrderToWorkOrder(data as DbWorkOrder);
+    setWorkOrders((current) => current.map((workOrder) =>
+      workOrder.id === id ? updatedWorkOrder : workOrder
+    ));
   };
 
   const deleteWorkOrder = async (id: string) => {

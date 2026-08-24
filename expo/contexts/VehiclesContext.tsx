@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Vehicle } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
 
 type DbVehicle = Database['public']['Tables']['vehicles']['Row'];
 type DbVehicleInsert = Database['public']['Tables']['vehicles']['Insert'];
@@ -21,6 +22,7 @@ const mapDbVehicleToVehicle = (dbVehicle: DbVehicle): Vehicle => ({
   ownerPhone: dbVehicle.owner_phone,
   ownerEmail: dbVehicle.owner_email || undefined,
   photoUrl: dbVehicle.photo_url || undefined,
+  workshopId: dbVehicle.workshop_id || undefined,
   createdAt: dbVehicle.created_at,
 });
 
@@ -36,23 +38,39 @@ const mapVehicleToDbInsert = (vehicle: Omit<Vehicle, 'id' | 'createdAt'>): DbVeh
   owner_phone: vehicle.ownerPhone,
   owner_email: vehicle.ownerEmail || null,
   photo_url: vehicle.photoUrl || null,
+  workshop_id: vehicle.workshopId || null,
 });
 
 export const [VehiclesProvider, useVehicles] = createContextHook(() => {
+  const { user: currentUser } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    loadVehicles();
-  }, []);
+    if (currentUser) {
+      void loadVehicles();
+    } else {
+      setVehicles([]);
+      setIsLoading(false);
+    }
+  }, [currentUser?.id, currentUser?.role, currentUser?.workshopId]);
 
   const loadVehicles = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('vehicles')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
+
+      if (currentUser?.role === 'technician') {
+        if (!currentUser.workshopId) {
+          setVehicles([]);
+          return;
+        }
+        query = query.eq('workshop_id', currentUser.workshopId);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) {
         console.error('Error loading vehicles:', error);
@@ -110,6 +128,7 @@ export const [VehiclesProvider, useVehicles] = createContextHook(() => {
       if (updates.ownerPhone !== undefined) dbUpdate.owner_phone = updates.ownerPhone;
       if (updates.ownerEmail !== undefined) dbUpdate.owner_email = updates.ownerEmail || null;
       if (updates.photoUrl !== undefined) dbUpdate.photo_url = updates.photoUrl || null;
+      if (updates.workshopId !== undefined) dbUpdate.workshop_id = updates.workshopId || null;
       
       const { data, error } = await supabase
         .from('vehicles')

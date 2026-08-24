@@ -55,7 +55,7 @@ const createInitialFormState = (): VehicleFormState => ({
 export default function VehiclesScreen() {
   const { vehicles, addVehicle, updateVehicle, deleteVehicle } = useVehicles();
   const { clients } = useClients();
-  const { permissions } = useAuth();
+  const { permissions, user: currentUser } = useAuth();
   const canManageVehicles = permissions.canManageVehicles;
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
@@ -153,6 +153,11 @@ export default function VehiclesScreen() {
         ownerPhone: selectedClient.phone,
         ownerEmail: selectedClient.email,
         photoUrl: formData.photoUrl ?? undefined,
+        // A selected client normally carries its workshop.  The current
+        // technician's workshop is a safe fallback while the client list is
+        // refreshing after authentication.  The database verifies and derives
+        // the final value from client_id as the authoritative source.
+        workshopId: selectedClient.workshopId ?? currentUser?.workshopId,
       };
 
       if (editingVehicle) {

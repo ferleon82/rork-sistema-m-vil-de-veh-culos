@@ -62,8 +62,12 @@ export default function WorkshopsScreen() {
   });
 
   const ownerOptions = useMemo(
-    () => users.filter((user) => user.role === 'technician' || user.role === 'admin'),
-    [users]
+    () => users.filter((user) =>
+      user.role === 'technician'
+      && !!editingWorkshop
+      && user.workshopId === editingWorkshop.id
+    ),
+    [users, editingWorkshop]
   );
 
   const selectedCountry = getCountryByCode(formData.countryCode);
@@ -87,7 +91,7 @@ export default function WorkshopsScreen() {
       setEditingWorkshop(workshop);
       setFormData({
         name: workshop.name,
-        ownerId: workshop.ownerId,
+        ownerId: workshop.ownerId ?? '',
         countryCode: workshop.countryCode,
         phone: workshop.phone ?? '',
         address: workshop.address ?? '',
@@ -110,14 +114,9 @@ export default function WorkshopsScreen() {
       Alert.alert('Error', 'Ingresa el nombre de la mecánica');
       return;
     }
-    if (!formData.ownerId) {
-      Alert.alert('Error', 'Debes asignar un dueño (técnico o administrador)');
-      return;
-    }
-
     const payload: Omit<Workshop, 'id' | 'createdAt'> = {
       name: formData.name.trim(),
-      ownerId: formData.ownerId,
+      ownerId: formData.ownerId || null,
       countryCode: formData.countryCode,
       phone: formData.phone.trim() ? formData.phone.trim() : undefined,
       address: formData.address.trim() ? formData.address.trim() : undefined,
@@ -221,7 +220,7 @@ export default function WorkshopsScreen() {
             <View style={styles.infoRow}>
               <Users size={16} color="#0f172a" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.infoLabel}>Dueño asignado</Text>
+                <Text style={styles.infoLabel}>Técnico responsable</Text>
                 <Text style={styles.infoValue}>{owner.name}</Text>
               </View>
             </View>
@@ -296,7 +295,7 @@ export default function WorkshopsScreen() {
       <View style={styles.heroCard}>
         <Text style={styles.heroTitle}>Mecánicas Drivvo</Text>
         <Text style={styles.heroSubtitle}>
-          Organiza tus talleres, asigna dueños responsables y sincroniza la operación con tus órdenes de trabajo.
+          Crea talleres, asigna técnicos responsables y sincroniza la operación con tus órdenes de trabajo.
         </Text>
       </View>
 
@@ -330,7 +329,7 @@ export default function WorkshopsScreen() {
                 testID="workshop-name-input"
               />
 
-              <Text style={styles.label}>Dueño *</Text>
+              <Text style={styles.label}>Técnico responsable (opcional)</Text>
               <TouchableOpacity
                 style={styles.selector}
                 onPress={() => setShowOwnerPicker(true)}
@@ -338,7 +337,7 @@ export default function WorkshopsScreen() {
               >
                 <Users size={18} color="#6b7280" />
                 <Text style={styles.selectorText}>
-                  {selectedOwner ? selectedOwner.name : 'Selecciona un técnico / administrador'}
+                  {selectedOwner ? selectedOwner.name : 'Asignar después de crear técnicos'}
                 </Text>
               </TouchableOpacity>
 
@@ -418,7 +417,7 @@ export default function WorkshopsScreen() {
         <View style={styles.pickerOverlay}>
           <View style={styles.pickerContent}>
             <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Seleccionar dueño</Text>
+              <Text style={styles.pickerTitle}>Seleccionar técnico responsable</Text>
               <TouchableOpacity onPress={() => setShowOwnerPicker(false)}>
                 <X size={22} color="#0f172a" />
               </TouchableOpacity>
@@ -435,12 +434,12 @@ export default function WorkshopsScreen() {
                   }}
                 >
                   <Text style={styles.pickerItemText}>{item.name}</Text>
-                  <Text style={styles.pickerItemRole}>{item.role === 'admin' ? 'Administrador' : 'Técnico'}</Text>
+                  <Text style={styles.pickerItemRole}>Técnico de esta mecánica</Text>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
                 <View style={styles.emptyOwners}>
-                  <Text style={styles.emptyOwnersText}>Crea un técnico para poder asignarlo como dueño.</Text>
+                  <Text style={styles.emptyOwnersText}>Primero crea un técnico y asígnalo a esta mecánica.</Text>
                 </View>
               }
             />

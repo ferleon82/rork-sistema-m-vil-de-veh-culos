@@ -1,13 +1,12 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { User, UserRole } from '@/types';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 
 type DbUser = Database['public']['Tables']['users']['Row'];
-type DbUserInsert = Database['public']['Tables']['users']['Insert'];
-type DbUserUpdate = Database['public']['Tables']['users']['Update'];
+export type CreateUserInput = Omit<User, 'id'>;
 
 const mapDbUserToUser = (dbUser: DbUser): User => ({
   id: dbUser.id,
@@ -16,244 +15,76 @@ const mapDbUserToUser = (dbUser: DbUser): User => ({
   role: dbUser.role,
   countryCode: dbUser.country_code,
   phone: dbUser.phone || undefined,
-  password: dbUser.password,
   clientId: dbUser.client_id || undefined,
   workshopId: dbUser.workshop_id || undefined,
 });
 
-const mapUserToDbInsert = (user: Omit<User, 'id'>): DbUserInsert => ({
-  email: user.email,
-  name: user.name,
-  role: user.role,
-  country_code: user.countryCode,
-  phone: user.phone || null,
-  password: user.password,
-  client_id: user.clientId || null,
-  workshop_id: user.workshopId || null,
-});
+const invokeUserManager = async <T,>(body: Record<string, unknown>) => {
+  const { data, error } = await supabase.functions.invoke('manage-users', { body });
+  if (error) {
+    let message = error.message || 'No se pudo gestionar el usuario';
+    const response = (error as { context?: Response }).context;
+    if (response?.json) {
+      const responseBody = await response.clone().json().catch(() => null) as { error?: unknown } | null;
+      if (typeof responseBody?.error === 'string') message = responseBody.error;
+    }
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data as T;
+};
 
 export const [UsersProvider, useUsers] = createContextHook(() => {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (currentUser) {
-      loadUsers();
+    // Mechanics have no Users tab and are intentionally forbidden from the
+    // management Edge Function. Avoid a needless 403 during every login.
+    if (currentUser && currentUser.role !== 'mechanic') {
+      void loadUsers();
+    } else {
+      setUsers([]);
+      setIsLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.role]);
 
   const loadUsers = async () => {
     try {
       setIsLoading(true);
-      console.log('[UsersContext] Loading users for role:', currentUser?.role);
-      console.log('[UsersContext] Current user workshopId:', currentUser?.workshopId);
-      
-      let query = supabase.from('users').select('*');
-      
-      if (currentUser?.role === 'technician') {
-        console.log('[UsersContext] Applying technician filter: only mechanics from workshop', currentUser.workshopId);
-        query = query
-          .eq('role', 'mechanic')
-          .eq('workshop_id', currentUser.workshopId);
-      }
-      
-      const { data, error } = await query.order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('[UsersContext] Error loading users:', error);
-        throw error;
-      }
-      
-      if (data) {
-        console.log('[UsersContext] Loaded users count:', data.length);
-        const mappedUsers = data.map(mapDbUserToUser);
-        setUsers(mappedUsers);
-      }
+      const result = await invokeUserManager<{ users: DbUser[] }>({ action: 'list' });
+      setUsers((result.users || []).map(mapDbUserToUser));
     } catch (error) {
-      console.error('[UsersContext] Error loading users:', error);
+      console.error('Error loading users:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-
-
-  const addUser = async (user: Omit<User, 'id'>) => {
-    try {
-      console.log('[UsersContext] Adding user:', { ...user, password: '***' });
-      console.log('[UsersContext] User workshopId:', user.workshopId);
-      console.log('[UsersContext] Current user workshopId:', currentUser?.workshopId);
-      const dbInsert = mapUserToDbInsert(user);
-      console.log('[UsersContext] DB Insert payload:', { ...dbInsert, password: '***' });
-      console.log('[UsersContext] DB Insert workshopId:', dbInsert.workshop_id);
-      
-      const { data, error } = await supabase
-        .from('users')
-        .insert(dbInsert)
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('[UsersContext] Supabase error:', error);
-        console.error('[UsersContext] Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw new Error(error.message || 'Error al crear usuario');
-      }
-      
-      if (data) {
-        console.log('[UsersContext] User added successfully:', data.id);
-        await loadUsers();
-        const newUser = mapDbUserToUser(data);
-        return newUser;
-      }
-    } catch (error) {
-      console.error('[UsersContext] Catch block error:', error);
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error('Error desconocido al crear usuario');
-    }
+  const addUser = async (user: CreateUserInput) => {
+    const result = await invokeUserManager<{ user: DbUser }>({ action: 'create', user });
+    const newUser = mapDbUserToUser(result.user);
+    setUsers((current) => [newUser, ...current]);
+    return newUser;
   };
 
-  const updateUser = async (id: string, updates: Partial<User>) => {
-    try {
-      console.log('[UsersContext] Updating user:', id, { ...updates, password: updates.password ? '***' : undefined });
-      const dbUpdate: DbUserUpdate = {};
-      if (updates.email !== undefined) dbUpdate.email = updates.email;
-      if (updates.name !== undefined) dbUpdate.name = updates.name;
-      if (updates.role !== undefined) dbUpdate.role = updates.role;
-      if (updates.countryCode !== undefined) dbUpdate.country_code = updates.countryCode;
-      if (updates.phone !== undefined) dbUpdate.phone = updates.phone || null;
-      if (updates.password !== undefined) dbUpdate.password = updates.password;
-      if (updates.clientId !== undefined) dbUpdate.client_id = updates.clientId || null;
-      if (updates.workshopId !== undefined) dbUpdate.workshop_id = updates.workshopId || null;
-      
-      const { data, error } = await supabase
-        .from('users')
-        .update(dbUpdate)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('[UsersContext] Supabase error:', error);
-        console.error('[UsersContext] Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw new Error(error.message || 'Error al actualizar usuario');
-      }
-      
-      if (data) {
-        console.log('[UsersContext] User updated successfully');
-        await loadUsers();
-      }
-    } catch (error) {
-      console.error('[UsersContext] Catch block error:', error);
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error('Error desconocido al actualizar usuario');
-    }
+  const updateUser = async (id: string, updates: Omit<User, 'id'>) => {
+    const result = await invokeUserManager<{ user: DbUser; requiresGoogleSignIn?: boolean }>({ action: 'update', userId: id, user: updates });
+    const updatedUser = mapDbUserToUser(result.user);
+    setUsers((current) => current.map((user) => user.id === id ? updatedUser : user));
+    return { user: updatedUser, requiresGoogleSignIn: !!result.requiresGoogleSignIn };
   };
 
   const deleteUser = async (id: string) => {
-    try {
-      console.log('[UsersContext] Deleting user:', id);
-      
-      const userToDelete = users.find(u => u.id === id);
-      console.log('[UsersContext] User to delete:', userToDelete);
-      
-      const { data: workshopsData, error: workshopsCheckError } = await supabase
-        .from('workshops')
-        .select('id, name')
-        .eq('owner_id', id);
-      
-      if (workshopsCheckError) {
-        console.error('[UsersContext] Error checking workshops:', workshopsCheckError);
-        throw new Error('Error al verificar talleres asociados');
-      }
-      
-      if (workshopsData && workshopsData.length > 0) {
-        const workshopNames = workshopsData.map(w => w.name).join(', ');
-        throw new Error(`No se puede eliminar este usuario porque es dueño de los siguientes talleres: ${workshopNames}. Elimina primero los talleres o cambia el propietario.`);
-      }
-      
-      console.log('[UsersContext] Updating work orders assigned to user...');
-      const { error: updateWorkOrdersError } = await supabase
-        .from('work_orders')
-        .update({ assigned_to: null })
-        .eq('assigned_to', id);
-      
-      if (updateWorkOrdersError) {
-        console.error('[UsersContext] Error updating work orders:', updateWorkOrdersError);
-        throw new Error('Error al actualizar las órdenes de trabajo asociadas');
-      }
-      
-      console.log('[UsersContext] Deleting user from database...');
-      const { error: deleteError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', id);
-      
-      if (deleteError) {
-        console.error('[UsersContext] Error deleting user:', deleteError);
-        throw new Error(deleteError.message || 'Error al eliminar el usuario');
-      }
-      
-      console.log('[UsersContext] User deleted successfully');
-      setUsers(users.filter((u) => u.id !== id));
-    } catch (error) {
-      console.error('[UsersContext] Error in deleteUser:', error);
-      if (error instanceof Error) {
-        throw error;
-      }
-      throw new Error('Error desconocido al eliminar el usuario');
-    }
+    await invokeUserManager({ action: 'delete', userId: id });
+    setUsers((current) => current.filter((user) => user.id !== id));
   };
 
-  const getUserById = (id: string) => {
-    return users.find((u) => u.id === id);
-  };
+  const getUserById = (id: string) => users.find((user) => user.id === id);
+  const getUsersByRole = (role: UserRole) => users.filter((user) => user.role === role);
+  const getMechanics = () => getUsersByRole('mechanic');
+  const getUsersByWorkshop = (workshopId: string) => users.filter((user) => user.workshopId === workshopId);
 
-  const getUsersByRole = (role: UserRole) => {
-    return users.filter((u) => u.role === role);
-  };
-
-  const getMechanics = () => {
-    return users.filter((u) => u.role === 'mechanic');
-  };
-
-  const getUsersByWorkshop = (workshopId: string) => {
-    return users.filter((u) => u.workshopId === workshopId);
-  };
-
-  const authenticateUser = (email: string, password: string) => {
-    const foundUser = users.find((u) => u.email === email);
-    if (foundUser && foundUser.password === password) {
-      return foundUser;
-    }
-    return null;
-  };
-
-  return {
-    users,
-    isLoading,
-    loadUsers,
-    addUser,
-    updateUser,
-    deleteUser,
-    getUserById,
-    getUsersByRole,
-    getMechanics,
-    authenticateUser,
-    getUsersByWorkshop,
-  };
+  return { users, isLoading, loadUsers, addUser, updateUser, deleteUser, getUserById, getUsersByRole, getMechanics, getUsersByWorkshop };
 });

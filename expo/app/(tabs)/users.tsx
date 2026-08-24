@@ -35,8 +35,6 @@ type UserFormData = {
   phone: string;
   countryCode: string;
   role: UserRole;
-  password: string;
-  confirmPassword: string;
   workshopId?: string;
 };
 
@@ -47,7 +45,7 @@ export default function UsersScreen() {
     ? 'mechanic'
     : assignableRoles[0] ?? 'mechanic';
   const { users, addUser, updateUser, deleteUser, getUsersByWorkshop } = useUsers();
-  const { workshops } = useWorkshops();
+  const { workshops, loadWorkshops } = useWorkshops();
   const canManageUsers = permissions.canManageUsers;
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>('all');
@@ -65,8 +63,6 @@ export default function UsersScreen() {
     phone: '',
     countryCode: 'EC',
     role: defaultRoleForCreation,
-    password: '',
-    confirmPassword: '',
   });
 
   if (!canManageUsers) {
@@ -82,6 +78,7 @@ export default function UsersScreen() {
   }
 
   const selectedCountry = getCountryByCode(formData.countryCode);
+  const selectedRoleRequiresWorkshop = formData.role !== 'admin';
 
   const handleOpenModal = (user?: User) => {
     if (user) {
@@ -96,8 +93,6 @@ export default function UsersScreen() {
         phone: user.phone || '',
         countryCode: user.countryCode,
         role: user.role,
-        password: '',
-        confirmPassword: '',
         workshopId: user.workshopId,
       });
     } else {
@@ -108,8 +103,6 @@ export default function UsersScreen() {
         phone: '',
         countryCode: 'EC',
         role: defaultRoleForCreation,
-        password: '',
-        confirmPassword: '',
         workshopId: currentUser?.role === 'technician' ? currentUser.workshopId : undefined,
       });
     }
@@ -129,38 +122,16 @@ export default function UsersScreen() {
       return;
     }
 
-    const trimmedPassword = formData.password.trim();
-    const trimmedConfirm = formData.confirmPassword.trim();
-    const isEditing = Boolean(editingUser);
-
-    if (!isEditing && trimmedPassword.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-
-    if (trimmedPassword || trimmedConfirm) {
-      if (trimmedPassword.length < 6) {
-        Alert.alert('Error', 'La nueva contraseña debe tener al menos 6 caracteres');
-        return;
-      }
-      if (trimmedPassword !== trimmedConfirm) {
-        Alert.alert('Error', 'Las contraseñas no coinciden');
-        return;
-      }
-    }
-
-    const passwordToPersist = trimmedPassword || editingUser?.password || '';
-
-    if (!passwordToPersist) {
-      Alert.alert('Error', 'Debes definir una contraseña para este usuario');
-      return;
-    }
-
     const canAssignSelectedRole =
       permissions.assignableRoles.includes(formData.role) || editingUser?.role === formData.role;
 
     if (!canAssignSelectedRole) {
       Alert.alert('Permiso denegado', 'No tienes permisos para asignar este rol');
+      return;
+    }
+
+    if (selectedRoleRequiresWorkshop && !(isAdmin ? formData.workshopId : currentUser?.workshopId)) {
+      Alert.alert('Mecánica requerida', 'Los técnicos y mecánicos deben tener una mecánica asignada.');
       return;
     }
 
@@ -171,17 +142,26 @@ export default function UsersScreen() {
         role: formData.role,
         countryCode: formData.countryCode,
         phone: formData.phone ? formData.phone : undefined,
-        password: passwordToPersist,
-        workshopId: formData.workshopId,
+        workshopId: isAdmin
+          ? (selectedRoleRequiresWorkshop ? formData.workshopId : undefined)
+          : currentUser?.workshopId,
       };
 
       if (editingUser) {
-        await updateUser(editingUser.id, payload);
-        Alert.alert('Éxito', 'Usuario actualizado correctamente');
+        const result = await updateUser(editingUser.id, payload);
+        Alert.alert(
+          'Éxito',
+          result.requiresGoogleSignIn
+            ? 'Correo actualizado. La persona debe cerrar sesión e ingresar con Google usando el correo nuevo.'
+            : 'Usuario actualizado correctamente',
+        );
       } else {
         await addUser(payload);
         Alert.alert('Éxito', 'Usuario creado correctamente');
       }
+      // Changing a technician may assign or clear the responsible technician
+      // through the database trigger. Refresh the workshop cache immediately.
+      await loadWorkshops();
       handleCloseModal();
     } catch (error) {
       console.error('[UsersScreen] Error saving user:', error);
@@ -532,7 +512,11 @@ export default function UsersScreen() {
                       formData.role === role && styles.roleOptionSelected,
                       formData.role === role && { borderColor: getRoleColor(role) },
                     ]}
-                    onPress={() => setFormData({ ...formData, role })}
+                    onPress={() => setFormData({
+                      ...formData,
+                      role,
+                      workshopId: role === 'admin' ? undefined : formData.workshopId,
+                    })}
                     testID={`user-role-${role}`}
                   >
                     {getRoleIcon(role)}
@@ -548,34 +532,17 @@ export default function UsersScreen() {
                 ))}
               </View>
 
-              <Text style={styles.label}>Credenciales de acceso</Text>
-              <Text style={styles.helperText}>
-                Define una contraseña segura para que el usuario pueda iniciar sesión en Drivvo
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={formData.password}
-                onChangeText={(text) => setFormData({ ...formData, password: text })}
-                placeholder={editingUser ? 'Nueva contraseña (opcional)' : 'Contraseña'}
-                placeholderTextColor="#9ca3af"
-                secureTextEntry
-                testID="user-password-input"
-              />
-              <TextInput
-                style={[styles.input, { marginTop: 12 }]}
-                value={formData.confirmPassword}
-                onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
-                placeholder="Confirmar contraseña"
-                placeholderTextColor="#9ca3af"
-                secureTextEntry
-                testID="user-password-confirm-input"
-              />
+              {!editingUser && (
+                <Text style={styles.helperText}>
+                  El usuario podrá acceder al iniciar sesión con la cuenta de Google que corresponda a este correo.
+                </Text>
+              )}
 
-              {isAdmin && workshops.length > 0 && (
+              {isAdmin && selectedRoleRequiresWorkshop && workshops.length > 0 && (
                 <View style={{ marginTop: 12 }}>
-                  <Text style={styles.label}>Mecánica</Text>
+                  <Text style={styles.label}>Mecánica *</Text>
                   <Text style={styles.helperText}>
-                    Asigna una mecánica al usuario. Solo aplica para técnicos.
+                    Es obligatoria para técnicos y mecánicos.
                   </Text>
                   <TouchableOpacity
                     style={styles.workshopSelector}
@@ -584,7 +551,7 @@ export default function UsersScreen() {
                   >
                     <Building2 size={20} color="#6b7280" />
                     <Text style={styles.workshopSelectorText}>
-                      {workshops.find((w) => w.id === formData.workshopId)?.name || 'Sin asignar'}
+                      {workshops.find((w) => w.id === formData.workshopId)?.name || 'Seleccionar mecánica'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -665,11 +632,8 @@ export default function UsersScreen() {
               </TouchableOpacity>
             </View>
             <FlatList
-              data={[
-                { id: undefined, name: 'Sin asignar' },
-                ...workshops,
-              ]}
-              keyExtractor={(item) => item.id || 'unassigned'}
+              data={workshops}
+              keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[

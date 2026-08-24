@@ -7,6 +7,9 @@ import { UsersProvider } from "@/contexts/UsersContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { VehiclesProvider } from "@/contexts/VehiclesContext";
 import { WorkOrdersProvider } from "@/contexts/WorkOrdersContext";
+import { WorkLogsProvider } from "@/contexts/WorkLogsContext";
+import { NotificationsProvider } from "@/contexts/NotificationsContext";
+import { BudgetApprovalsProvider } from "@/contexts/BudgetApprovalsContext";
 import { ClientsProvider } from "@/contexts/ClientsContext";
 import { WorkshopsProvider } from "@/contexts/WorkshopsContext";
 import { trpc, trpcClient } from "@/lib/trpc";
@@ -17,10 +20,11 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: "Atrás" }}>
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+      <Stack screenOptions={{ headerBackTitle: "Atrás" }}>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="notifications" options={{ title: "Notificaciones" }} />
+        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
     </Stack>
   );
 }
@@ -40,7 +44,13 @@ export default function RootLayout() {
                 <ClientsProvider>
                   <VehiclesProvider>
                     <WorkOrdersProvider>
-                      <RootLayoutNav />
+                      <BudgetApprovalsProvider>
+                        <WorkLogsProvider>
+                          <NotificationsProvider>
+                            <RootLayoutNav />
+                          </NotificationsProvider>
+                        </WorkLogsProvider>
+                      </BudgetApprovalsProvider>
                     </WorkOrdersProvider>
                   </VehiclesProvider>
                 </ClientsProvider>
