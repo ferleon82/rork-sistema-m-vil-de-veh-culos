@@ -4,13 +4,13 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Image,
   StyleSheet,
   Alert,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { Wrench } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
@@ -41,11 +41,13 @@ export default function LoginScreen() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Wrench size={48} color="#fff" />
-            </View>
-            <Text style={styles.title}>Sistema de Mantenimiento</Text>
-            <Text style={styles.subtitle}>Vehicular</Text>
+            <Image
+              source={require('../assets/images/logo-gesticar.png')}
+              style={styles.brandLogo}
+              resizeMode="contain"
+              accessibilityLabel="Gesticar"
+            />
+            <Text style={styles.title}>Sistema de mantenimiento vehicular</Text>
           </View>
 
           <View style={styles.form}>
@@ -86,30 +88,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 48,
   },
-  iconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: '#2563eb',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  brandLogo: {
+    width: 280,
+    height: 142,
+    marginBottom: 12,
   },
   title: {
     fontSize: 28,
     fontWeight: '700' as const,
     color: '#1f2937',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 24,
-    fontWeight: '600' as const,
-    color: '#2563eb',
     textAlign: 'center',
   },
   form: {

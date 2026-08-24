@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Clock,
@@ -164,7 +164,12 @@ export default function DashboardScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.welcomeCard}>
         <View style={styles.brandHeader}>
-          <Text style={styles.brandBadge}>Drivvo</Text>
+          <Image
+            source={require('../../assets/images/logo-gesticar.png')}
+            style={styles.brandLogo}
+            resizeMode="contain"
+            accessibilityLabel="Gesticar"
+          />
           <Text style={styles.brandSubtitle}>Ecosistema inteligente de talleres</Text>
         </View>
         <Text style={styles.welcomeText}>Hola, {user?.name}</Text>
@@ -412,16 +417,11 @@ const styles = StyleSheet.create({
   brandHeader: {
     marginBottom: 12,
   },
-  brandBadge: {
+  brandLogo: {
+    width: 125,
+    height: 64,
     alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: '#eef2ff',
-    color: '#4338ca',
-    fontSize: 14,
-    fontWeight: '700' as const,
-    marginBottom: 6,
+    marginBottom: 2,
   },
   brandSubtitle: {
     fontSize: 14,

@@ -293,7 +293,7 @@ export default function WorkshopsScreen() {
       </View>
 
       <View style={styles.heroCard}>
-        <Text style={styles.heroTitle}>Mecánicas Drivvo</Text>
+        <Text style={styles.heroTitle}>Mecánicas Gesticar</Text>
         <Text style={styles.heroSubtitle}>
           Crea talleres, asigna técnicos responsables y sincroniza la operación con tus órdenes de trabajo.
         </Text>
@@ -369,7 +369,7 @@ export default function WorkshopsScreen() {
                 style={styles.input}
                 value={formData.email}
                 onChangeText={(text) => setFormData({ ...formData, email: text })}
-                placeholder="contacto@drivvo.com"
+                placeholder="contacto@gesticar.ec"
                 placeholderTextColor="#9ca3af"
                 keyboardType="email-address"
                 autoCapitalize="none"
